@@ -24,7 +24,7 @@ export const loans = sqliteTable('loans', {
   principalCents: integer('principal_cents').notNull(),
   monthlyPaymentCents: integer('monthly_payment_cents').notNull(),
 
-  interestRate: real('interest_rate').notNull().default(0), // annual %, e.g. 5.25
+  interestRate: real('interest_rate').notNull().default(0), // flat monthly %, e.g. 1.5
   termMonths: integer('term_months').notNull(),
 
   startDate: integer('start_date', { mode: 'timestamp' }).notNull(),

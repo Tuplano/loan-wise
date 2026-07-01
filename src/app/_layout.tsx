@@ -1,11 +1,10 @@
 import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from '@/components/app-tabs';
 import { db } from '@/db/client';
 import migrations from '@/db/migrations/migrations';
 import { seedDefaultCategories } from '@/db/seed';
@@ -14,7 +13,7 @@ import '@/global.css';
 
 SplashScreen.preventAutoHideAsync();
 
-export default function TabLayout() {
+export default function RootLayout() {
   const colorScheme = useColorScheme();
   const { success, error } = useMigrations(db, migrations);
 
@@ -31,7 +30,13 @@ export default function TabLayout() {
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <AnimatedSplashOverlay />
-      {success && <AppTabs />}
+      {success && (
+        <Stack>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="add-loan" options={{ presentation: 'modal', title: 'Add Loan' }} />
+          <Stack.Screen name="loan/[id]" options={{ title: 'Loan' }} />
+        </Stack>
+      )}
     </ThemeProvider>
   );
 }
