@@ -13,11 +13,21 @@ export default function AppTabs() {
       indicatorColor={colors.backgroundElement}
       labelStyle={{ selected: { color: colors.text } }}>
       <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Label>Loans</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Dashboard</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon
           src={require('@/assets/images/tabIcons/home.png')}
           renderingMode="template"
         />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="loans">
+        <NativeTabs.Trigger.Label>Loans</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="list.bullet" md="list" />
+      </NativeTabs.Trigger>
+
+      <NativeTabs.Trigger name="payments">
+        <NativeTabs.Trigger.Label>Payments</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="receipt" md="receipt_long" />
       </NativeTabs.Trigger>
 
       <NativeTabs.Trigger name="settings">

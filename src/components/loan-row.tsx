@@ -1,3 +1,4 @@
+import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from './themed-text';
@@ -16,6 +17,7 @@ type LoanRowProps = {
   monthlyPaymentCents: number;
   status: LoanStatus;
   onPress?: () => void;
+  onDelete?: () => void;
 };
 
 const statusLabel: Record<LoanStatus, string> = {
@@ -32,13 +34,16 @@ export function LoanRow({
   monthlyPaymentCents,
   status,
   onPress,
+  onDelete,
 }: LoanRowProps) {
   const theme = useTheme();
   const subtitle = [categoryName, lender].filter(Boolean).join(' · ') || 'Uncategorized';
 
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => pressed && styles.pressed}>
-      <ThemedView style={[styles.row, { borderBottomColor: theme.backgroundSelected }]}>
+    <ThemedView style={[styles.row, { borderBottomColor: theme.backgroundSelected }]}>
+      <Pressable
+        onPress={onPress}
+        style={({ pressed }) => [styles.rowContent, pressed && styles.pressed]}>
         <View style={styles.leading}>
           <ThemedText numberOfLines={1}>{name}</ThemedText>
           <View style={styles.metaRow}>
@@ -54,8 +59,20 @@ export function LoanRow({
             {statusLabel[status]}
           </ThemedText>
         </View>
-      </ThemedView>
-    </Pressable>
+      </Pressable>
+      {onDelete && (
+        <Pressable
+          hitSlop={8}
+          onPress={onDelete}
+          style={({ pressed }) => [styles.deleteButton, pressed && styles.pressed]}>
+          <SymbolView
+            tintColor={theme.textSecondary}
+            name={{ ios: 'trash', android: 'delete', web: 'delete' }}
+            size={18}
+          />
+        </Pressable>
+      )}
+    </ThemedView>
   );
 }
 
@@ -65,12 +82,21 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
+    alignItems: 'center',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  rowContent: {
+    flex: 1,
+    flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: Spacing.three,
     paddingVertical: Spacing.three,
+    paddingLeft: Spacing.three,
+  },
+  deleteButton: {
     paddingHorizontal: Spacing.three,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: Spacing.three,
   },
   leading: {
     gap: Spacing.half,

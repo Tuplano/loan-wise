@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -32,6 +32,7 @@ export default function LoanDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const loanId = Number(id);
   const theme = useTheme();
+  const router = useRouter();
 
   const { data: loanResult } = useLiveQuery(
     db.query.loans.findFirst({
@@ -174,23 +175,56 @@ export default function LoanDetailScreen() {
     await rescheduleReminder(newDueDate);
   }
 
+  function handleDelete() {
+    Alert.alert('Delete loan', `Delete "${loan.name}"? This also removes its payment history.`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          if (reminder?.notificationId) {
+            await cancelReminder(reminder.notificationId);
+          }
+          await db.delete(loans).where(eq(loans.id, loan.id));
+          router.back();
+        },
+      },
+    ]);
+  }
+
   return (
     <ThemedView style={styles.container}>
       <Stack.Screen
         options={{
           title: loan.name,
           headerRight: () => (
-            <Pressable onPress={handleToggleReminder} hitSlop={8}>
-              <SymbolView
-                tintColor={theme.text}
-                name={{
-                  ios: reminder?.enabled ? 'bell.fill' : 'bell',
-                  android: reminder?.enabled ? 'notifications_active' : 'notifications_none',
-                  web: reminder?.enabled ? 'notifications_active' : 'notifications_none',
-                }}
-                size={20}
-              />
-            </Pressable>
+            <View style={styles.headerActions}>
+              <Pressable onPress={handleToggleReminder} hitSlop={8}>
+                <SymbolView
+                  tintColor={theme.text}
+                  name={{
+                    ios: reminder?.enabled ? 'bell.fill' : 'bell',
+                    android: reminder?.enabled ? 'notifications_active' : 'notifications_none',
+                    web: reminder?.enabled ? 'notifications_active' : 'notifications_none',
+                  }}
+                  size={20}
+                />
+              </Pressable>
+              <Pressable onPress={() => router.push(`/loan/${loan.id}/edit`)} hitSlop={8}>
+                <SymbolView
+                  tintColor={theme.text}
+                  name={{ ios: 'pencil', android: 'edit', web: 'edit' }}
+                  size={20}
+                />
+              </Pressable>
+              <Pressable onPress={handleDelete} hitSlop={8}>
+                <SymbolView
+                  tintColor={theme.text}
+                  name={{ ios: 'trash', android: 'delete', web: 'delete' }}
+                  size={20}
+                />
+              </Pressable>
+            </View>
           ),
         }}
       />
@@ -299,6 +333,11 @@ function Stat({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.four,
   },
   safeArea: {
     flex: 1,

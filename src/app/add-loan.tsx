@@ -1,310 +1,42 @@
-import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
-import { Stack, useRouter } from 'expo-router';
-import { useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { useRouter } from 'expo-router';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
+import { LoanForm } from '@/components/loan-form';
 import { db } from '@/db/client';
 import { loans, reminders } from '@/db/schema';
-import { useTheme } from '@/hooks/use-theme';
 import { formatMoney } from '@/lib/format';
 import { scheduleLoanReminder } from '@/lib/notifications';
 
-function toCents(value: string) {
-  const amount = Number.parseFloat(value);
-  return Number.isFinite(amount) ? Math.round(amount * 100) : null;
-}
-
 export default function AddLoanScreen() {
-  const theme = useTheme();
   const router = useRouter();
-  const { data: categories } = useLiveQuery(db.query.categories.findMany());
-
-  const [name, setName] = useState('');
-  const [lender, setLender] = useState('');
-  const [categoryId, setCategoryId] = useState<number | null>(null);
-  const [principal, setPrincipal] = useState('');
-  const [interestRate, setInterestRate] = useState('');
-  const [termMonths, setTermMonths] = useState('');
-  const [notes, setNotes] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-
-  const principalCents = toCents(principal);
-  const termMonthsValue = Number.parseInt(termMonths, 10);
-  const monthlyRate = (Number.parseFloat(interestRate) || 0) / 100;
-
-  // Flat monthly interest: principal / term, plus interest charged on the full
-  // principal each month (not a reducing-balance amortization).
-  const monthlyPaymentCents =
-    principalCents !== null && Number.isFinite(termMonthsValue) && termMonthsValue > 0
-      ? Math.round(principalCents / termMonthsValue + principalCents * monthlyRate)
-      : null;
-
-  const isValid =
-    name.trim().length > 0 &&
-    principalCents !== null &&
-    principalCents > 0 &&
-    monthlyPaymentCents !== null &&
-    monthlyPaymentCents > 0 &&
-    Number.isFinite(termMonthsValue) &&
-    termMonthsValue > 0;
-
-  async function handleSubmit() {
-    if (!isValid || submitting) return;
-    setSubmitting(true);
-
-    const now = new Date();
-    const [createdLoan] = await db
-      .insert(loans)
-      .values({
-        name: name.trim(),
-        lender: lender.trim() || null,
-        categoryId,
-        principalCents: principalCents!,
-        monthlyPaymentCents: monthlyPaymentCents!,
-        interestRate: Number.parseFloat(interestRate) || 0,
-        termMonths: termMonthsValue,
-        startDate: now,
-        nextDueDate: now,
-        notes: notes.trim() || null,
-      })
-      .returning();
-
-    const settings = await db.query.appSettings.findFirst();
-    if (settings?.remindersEnabled) {
-      const notificationId = await scheduleLoanReminder({
-        loanName: createdLoan.name,
-        amountLabel: formatMoney(createdLoan.monthlyPaymentCents),
-        dueDate: createdLoan.nextDueDate,
-        daysBefore: settings.reminderDaysBefore,
-      });
-      await db.insert(reminders).values({
-        loanId: createdLoan.id,
-        daysBefore: settings.reminderDaysBefore,
-        enabled: true,
-        notificationId,
-      });
-    }
-
-    setSubmitting(false);
-    router.back();
-  }
 
   return (
-    <ThemedView style={styles.container}>
-      <Stack.Screen
-        options={{
-          headerRight: () => (
-            <Pressable onPress={handleSubmit} disabled={!isValid || submitting}>
-              <ThemedText
-                type="linkPrimary"
-                style={!isValid || submitting ? styles.disabledSave : undefined}>
-                Save
-              </ThemedText>
-            </Pressable>
-          ),
-        }}
-      />
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView
-          style={styles.flex}
-          contentContainerStyle={styles.formContent}
-          keyboardShouldPersistTaps="handled">
-          <Field label="Loan name">
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              placeholder="Car loan"
-              placeholderTextColor={theme.textSecondary}
-              style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
-            />
-          </Field>
+    <LoanForm
+      title="Add Loan"
+      onSubmit={async (values) => {
+        const now = new Date();
+        const [createdLoan] = await db
+          .insert(loans)
+          .values({ ...values, startDate: now, nextDueDate: now })
+          .returning();
 
-          <Field label="Lender (optional)">
-            <TextInput
-              value={lender}
-              onChangeText={setLender}
-              placeholder="Bank of America"
-              placeholderTextColor={theme.textSecondary}
-              style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
-            />
-          </Field>
+        const settings = await db.query.appSettings.findFirst();
+        if (settings?.remindersEnabled) {
+          const notificationId = await scheduleLoanReminder({
+            loanName: createdLoan.name,
+            amountLabel: formatMoney(createdLoan.monthlyPaymentCents),
+            dueDate: createdLoan.nextDueDate,
+            daysBefore: settings.reminderDaysBefore,
+          });
+          await db.insert(reminders).values({
+            loanId: createdLoan.id,
+            daysBefore: settings.reminderDaysBefore,
+            enabled: true,
+            notificationId,
+          });
+        }
 
-          <Field label="Category">
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-              {categories.map((category) => {
-                const selected = categoryId === category.id;
-                return (
-                  <Pressable
-                    key={category.id}
-                    onPress={() => setCategoryId(selected ? null : category.id)}>
-                    <ThemedView
-                      type={selected ? 'backgroundSelected' : 'backgroundElement'}
-                      style={styles.chip}>
-                      {category.color && (
-                        <View style={[styles.chipDot, { backgroundColor: category.color }]} />
-                      )}
-                      <ThemedText type="small">{category.name}</ThemedText>
-                    </ThemedView>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
-          </Field>
-
-          <View style={styles.row}>
-            <Field label="Principal" style={styles.flex}>
-              <TextInput
-                value={principal}
-                onChangeText={setPrincipal}
-                placeholder="10000"
-                keyboardType="decimal-pad"
-                placeholderTextColor={theme.textSecondary}
-                style={[
-                  styles.input,
-                  { color: theme.text, borderColor: theme.backgroundSelected },
-                ]}
-              />
-            </Field>
-            <Field label="Term (months)" style={styles.flex}>
-              <TextInput
-                value={termMonths}
-                onChangeText={setTermMonths}
-                placeholder="48"
-                keyboardType="number-pad"
-                placeholderTextColor={theme.textSecondary}
-                style={[
-                  styles.input,
-                  { color: theme.text, borderColor: theme.backgroundSelected },
-                ]}
-              />
-            </Field>
-          </View>
-
-          <Field label="Monthly interest rate % (optional)">
-            <TextInput
-              value={interestRate}
-              onChangeText={setInterestRate}
-              placeholder="1.5"
-              keyboardType="decimal-pad"
-              placeholderTextColor={theme.textSecondary}
-              style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
-            />
-          </Field>
-
-          <View style={styles.summaryRow}>
-            <ThemedText type="small" themeColor="textSecondary">
-              Monthly payment
-            </ThemedText>
-            <ThemedText type="subtitle">
-              {monthlyPaymentCents !== null ? formatMoney(monthlyPaymentCents) : '—'}
-            </ThemedText>
-          </View>
-
-          <Field label="Notes (optional)">
-            <TextInput
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="Anything worth remembering about this loan"
-              placeholderTextColor={theme.textSecondary}
-              multiline
-              numberOfLines={3}
-              style={[
-                styles.input,
-                styles.notesInput,
-                { color: theme.text, borderColor: theme.backgroundSelected },
-              ]}
-            />
-          </Field>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </ThemedView>
+        router.back();
+      }}
+    />
   );
 }
-
-function Field({
-  label,
-  children,
-  style,
-}: {
-  label: string;
-  children: React.ReactNode;
-  style?: object;
-}) {
-  return (
-    <View style={[styles.field, style]}>
-      <ThemedText type="small" themeColor="textSecondary">
-        {label}
-      </ThemedText>
-      {children}
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  flex: {
-    flex: 1,
-  },
-  formContent: {
-    padding: Spacing.four,
-    gap: Spacing.four,
-  },
-  field: {
-    gap: Spacing.one,
-  },
-  summaryRow: {
-    alignItems: 'center',
-    gap: Spacing.half,
-    paddingVertical: Spacing.two,
-  },
-  row: {
-    flexDirection: 'row',
-    gap: Spacing.three,
-  },
-  input: {
-    borderWidth: 1,
-    borderRadius: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    fontSize: 16,
-  },
-  notesInput: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  chipRow: {
-    flexDirection: 'row',
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.one,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.two,
-    marginRight: Spacing.two,
-  },
-  chipDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  disabledSave: {
-    opacity: 0.4,
-  },
-});

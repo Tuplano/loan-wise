@@ -35,7 +35,8 @@ export default function RootLayout() {
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="add-loan" options={{ presentation: 'modal', title: 'Add Loan' }} />
-          <Stack.Screen name="loan/[id]" options={{ title: 'Loan' }} />
+          <Stack.Screen name="loan/[id]/index" options={{ title: 'Loan' }} />
+          <Stack.Screen name="loan/[id]/edit" options={{ title: 'Edit Loan' }} />
         </Stack>
       )}
     </ThemeProvider>

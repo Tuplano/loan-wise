@@ -1,24 +1,27 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
-import { Link, useRouter } from 'expo-router';
-import { SymbolView } from 'expo-symbols';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DashboardSummary } from '@/components/dashboard-summary';
-import { LoanRow } from '@/components/loan-row';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { db } from '@/db/client';
 import { useTheme } from '@/hooks/use-theme';
+import { formatDate } from '@/lib/date';
+import { formatMoney } from '@/lib/format';
 
-export default function LoansScreen() {
+export default function DashboardScreen() {
   const theme = useTheme();
   const router = useRouter();
-  const { data: loans } = useLiveQuery(
-    db.query.loans.findMany({
-      with: { category: true, payments: true },
-      orderBy: (fields, { asc }) => [asc(fields.nextDueDate)],
+
+  const { data: loans } = useLiveQuery(db.query.loans.findMany({ with: { payments: true } }));
+  const { data: recentPayments } = useLiveQuery(
+    db.query.payments.findMany({
+      with: { loan: true },
+      orderBy: (fields, { desc }) => [desc(fields.paidAt)],
+      limit: 5,
     })
   );
 
@@ -38,56 +41,84 @@ export default function LoansScreen() {
   const activeLoans = loans.filter((loan) => loan.status === 'active');
   const monthlyDueCents = activeLoans.reduce((sum, loan) => sum + loan.monthlyPaymentCents, 0);
 
+  const upcoming = [...activeLoans]
+    .sort((a, b) => a.nextDueDate.getTime() - b.nextDueDate.getTime())
+    .slice(0, 5);
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-        <View style={styles.content}>
+        <ScrollView
+          style={styles.content}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
-            <ThemedText type="subtitle">Loans</ThemedText>
-            <Link href="/add-loan" asChild>
-              <Pressable style={({ pressed }) => pressed && styles.pressed}>
-                <ThemedView type="backgroundElement" style={styles.addButton}>
-                  <SymbolView
-                    tintColor={theme.text}
-                    name={{ ios: 'plus', android: 'add', web: 'add' }}
-                    size={20}
-                  />
-                </ThemedView>
-              </Pressable>
-            </Link>
+            <ThemedText type="subtitle">Dashboard</ThemedText>
           </View>
 
-          <FlatList
-            data={loans}
-            keyExtractor={(item) => String(item.id)}
-            contentContainerStyle={styles.listContent}
-            ListHeaderComponent={
-              <DashboardSummary
-                principalBalanceCents={principalBalanceCents}
-                totalPaidCents={totalPaidCents}
-                monthlyDueCents={monthlyDueCents}
-                activeCount={activeLoans.length}
-              />
-            }
-            ListEmptyComponent={
-              <View style={styles.emptyState}>
-                <ThemedText themeColor="textSecondary">No loans yet.</ThemedText>
-                <ThemedText themeColor="textSecondary">Tap + to add your first one.</ThemedText>
-              </View>
-            }
-            renderItem={({ item }) => (
-              <LoanRow
-                name={item.name}
-                lender={item.lender}
-                categoryName={item.category?.name}
-                categoryColor={item.category?.color}
-                monthlyPaymentCents={item.monthlyPaymentCents}
-                status={item.status}
-                onPress={() => router.push(`/loan/${item.id}`)}
-              />
-            )}
+          <DashboardSummary
+            principalBalanceCents={principalBalanceCents}
+            totalPaidCents={totalPaidCents}
+            monthlyDueCents={monthlyDueCents}
+            activeCount={activeLoans.length}
           />
-        </View>
+
+          <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+            Upcoming
+          </ThemedText>
+          {upcoming.length === 0 ? (
+            <ThemedText themeColor="textSecondary" style={styles.emptyRow}>
+              Nothing due right now.
+            </ThemedText>
+          ) : (
+            upcoming.map((loan) => (
+              <Pressable
+                key={loan.id}
+                onPress={() => router.push(`/loan/${loan.id}`)}
+                style={({ pressed }) => [
+                  styles.row,
+                  { borderBottomColor: theme.backgroundSelected },
+                  pressed && styles.pressed,
+                ]}>
+                <View style={styles.rowLeading}>
+                  <ThemedText numberOfLines={1}>{loan.name}</ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {formatDate(loan.nextDueDate)}
+                  </ThemedText>
+                </View>
+                <ThemedText>{formatMoney(loan.monthlyPaymentCents)}</ThemedText>
+              </Pressable>
+            ))
+          )}
+
+          <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+            Recent activity
+          </ThemedText>
+          {recentPayments.length === 0 ? (
+            <ThemedText themeColor="textSecondary" style={styles.emptyRow}>
+              No payments logged yet.
+            </ThemedText>
+          ) : (
+            recentPayments.map((payment) => (
+              <Pressable
+                key={payment.id}
+                onPress={() => router.push(`/loan/${payment.loanId}`)}
+                style={({ pressed }) => [
+                  styles.row,
+                  { borderBottomColor: theme.backgroundSelected },
+                  pressed && styles.pressed,
+                ]}>
+                <View style={styles.rowLeading}>
+                  <ThemedText numberOfLines={1}>{payment.loan.name}</ThemedText>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {formatDate(payment.paidAt)}
+                  </ThemedText>
+                </View>
+                <ThemedText>{formatMoney(payment.amountCents)}</ThemedText>
+              </Pressable>
+            ))
+          )}
+        </ScrollView>
       </SafeAreaView>
     </ThemedView>
   );
@@ -106,32 +137,35 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: MaxContentWidth,
   },
+  scrollContent: {
+    paddingBottom: BottomTabInset + Spacing.four,
+  },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
     paddingHorizontal: Spacing.four,
     paddingVertical: Spacing.three,
+  },
+  sectionLabel: {
+    paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.five,
+    paddingBottom: Spacing.one,
+  },
+  emptyRow: {
+    paddingHorizontal: Spacing.four,
+    paddingVertical: Spacing.two,
   },
   pressed: {
     opacity: 0.6,
   },
-  addButton: {
-    width: 36,
-    height: 36,
-    borderRadius: Spacing.two,
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.one,
+    paddingVertical: Spacing.two,
     paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.six,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  listContent: {
-    paddingHorizontal: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
+  rowLeading: {
+    gap: Spacing.half,
+    flexShrink: 1,
   },
 });
