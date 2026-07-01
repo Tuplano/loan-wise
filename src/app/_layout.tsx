@@ -7,7 +7,7 @@ import { useColorScheme } from 'react-native';
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { db } from '@/db/client';
 import migrations from '@/db/migrations/migrations';
-import { seedDefaultCategories } from '@/db/seed';
+import { seedAppSettings, seedDefaultCategories } from '@/db/seed';
 
 import '@/global.css';
 
@@ -20,6 +20,7 @@ export default function RootLayout() {
   useEffect(() => {
     if (success) {
       seedDefaultCategories();
+      seedAppSettings();
     }
   }, [success]);
 

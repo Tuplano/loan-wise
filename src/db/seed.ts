@@ -1,5 +1,5 @@
 import { db } from '@/db/client';
-import { categories } from '@/db/schema';
+import { appSettings, categories } from '@/db/schema';
 
 export const categoryColors = [
   '#208AEF',
@@ -26,4 +26,11 @@ export async function seedDefaultCategories() {
   if (existing.length > 0) return;
 
   await db.insert(categories).values(defaultCategories);
+}
+
+export async function seedAppSettings() {
+  const existing = await db.select().from(appSettings).limit(1);
+  if (existing.length > 0) return;
+
+  await db.insert(appSettings).values({});
 }

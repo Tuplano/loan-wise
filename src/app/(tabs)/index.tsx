@@ -4,6 +4,7 @@ import { SymbolView } from 'expo-symbols';
 import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { DashboardSummary } from '@/components/dashboard-summary';
 import { LoanRow } from '@/components/loan-row';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -16,10 +17,26 @@ export default function LoansScreen() {
   const router = useRouter();
   const { data: loans } = useLiveQuery(
     db.query.loans.findMany({
-      with: { category: true },
+      with: { category: true, payments: true },
       orderBy: (fields, { asc }) => [asc(fields.nextDueDate)],
     })
   );
+
+  const principalBalanceCents = loans.reduce((sum, loan) => {
+    const principalPaid = loan.payments.reduce(
+      (paid, payment) => paid + (payment.principalPortionCents ?? 0),
+      0
+    );
+    return sum + Math.max(loan.principalCents - principalPaid, 0);
+  }, 0);
+
+  const totalPaidCents = loans.reduce(
+    (sum, loan) => sum + loan.payments.reduce((paid, payment) => paid + payment.amountCents, 0),
+    0
+  );
+
+  const activeLoans = loans.filter((loan) => loan.status === 'active');
+  const monthlyDueCents = activeLoans.reduce((sum, loan) => sum + loan.monthlyPaymentCents, 0);
 
   return (
     <ThemedView style={styles.container}>
@@ -40,29 +57,36 @@ export default function LoansScreen() {
             </Link>
           </View>
 
-          {loans.length === 0 ? (
-            <View style={styles.emptyState}>
-              <ThemedText themeColor="textSecondary">No loans yet.</ThemedText>
-              <ThemedText themeColor="textSecondary">Tap + to add your first one.</ThemedText>
-            </View>
-          ) : (
-            <FlatList
-              data={loans}
-              keyExtractor={(item) => String(item.id)}
-              contentContainerStyle={styles.listContent}
-              renderItem={({ item }) => (
-                <LoanRow
-                  name={item.name}
-                  lender={item.lender}
-                  categoryName={item.category?.name}
-                  categoryColor={item.category?.color}
-                  monthlyPaymentCents={item.monthlyPaymentCents}
-                  status={item.status}
-                  onPress={() => router.push(`/loan/${item.id}`)}
-                />
-              )}
-            />
-          )}
+          <FlatList
+            data={loans}
+            keyExtractor={(item) => String(item.id)}
+            contentContainerStyle={styles.listContent}
+            ListHeaderComponent={
+              <DashboardSummary
+                principalBalanceCents={principalBalanceCents}
+                totalPaidCents={totalPaidCents}
+                monthlyDueCents={monthlyDueCents}
+                activeCount={activeLoans.length}
+              />
+            }
+            ListEmptyComponent={
+              <View style={styles.emptyState}>
+                <ThemedText themeColor="textSecondary">No loans yet.</ThemedText>
+                <ThemedText themeColor="textSecondary">Tap + to add your first one.</ThemedText>
+              </View>
+            }
+            renderItem={({ item }) => (
+              <LoanRow
+                name={item.name}
+                lender={item.lender}
+                categoryName={item.category?.name}
+                categoryColor={item.category?.color}
+                monthlyPaymentCents={item.monthlyPaymentCents}
+                status={item.status}
+                onPress={() => router.push(`/loan/${item.id}`)}
+              />
+            )}
+          />
         </View>
       </SafeAreaView>
     </ThemedView>
@@ -100,11 +124,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   emptyState: {
-    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.one,
     paddingHorizontal: Spacing.four,
+    paddingTop: Spacing.six,
   },
   listContent: {
     paddingHorizontal: Spacing.three,

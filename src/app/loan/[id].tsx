@@ -9,10 +9,11 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { MaxContentWidth, Spacing } from '@/constants/theme';
 import { db } from '@/db/client';
-import { loans, payments, type LoanStatus } from '@/db/schema';
+import { loans, payments, reminders, type LoanStatus } from '@/db/schema';
 import { useTheme } from '@/hooks/use-theme';
 import { addMonths, formatDate } from '@/lib/date';
 import { formatMoney } from '@/lib/format';
+import { cancelReminder, scheduleLoanReminder } from '@/lib/notifications';
 
 const statusLabel: Record<LoanStatus, string> = {
   active: 'Active',
@@ -38,6 +39,7 @@ export default function LoanDetailScreen() {
       with: {
         category: true,
         payments: { orderBy: (fields, { asc }) => [asc(fields.paidAt)] },
+        reminders: true,
       },
     })
   );
@@ -56,6 +58,7 @@ export default function LoanDetailScreen() {
   const paidCount = loan.payments.length;
   const nextUnpaidIndex = paidCount < loan.termMonths ? paidCount : null;
   const lastPaidIndex = paidCount > 0 ? paidCount - 1 : null;
+  const reminder = loan.reminders[0];
 
   const schedule: ScheduleEntry[] = Array.from({ length: loan.termMonths }, (_, index) => {
     const payment = loan.payments[index];
@@ -67,6 +70,62 @@ export default function LoanDetailScreen() {
     };
   });
 
+  async function rescheduleReminder(newDueDate: Date | null) {
+    if (!reminder || !reminder.enabled) return;
+
+    await cancelReminder(reminder.notificationId);
+    const notificationId = newDueDate
+      ? await scheduleLoanReminder({
+          loanName: loan.name,
+          amountLabel: formatMoney(loan.monthlyPaymentCents),
+          dueDate: newDueDate,
+          daysBefore: reminder.daysBefore,
+        })
+      : null;
+
+    await db.update(reminders).set({ notificationId }).where(eq(reminders.id, reminder.id));
+  }
+
+  async function handleToggleReminder() {
+    if (reminder) {
+      const nextEnabled = !reminder.enabled;
+      if (nextEnabled) {
+        const notificationId = await scheduleLoanReminder({
+          loanName: loan.name,
+          amountLabel: formatMoney(loan.monthlyPaymentCents),
+          dueDate: loan.nextDueDate,
+          daysBefore: reminder.daysBefore,
+        });
+        await db
+          .update(reminders)
+          .set({ enabled: true, notificationId })
+          .where(eq(reminders.id, reminder.id));
+      } else {
+        await cancelReminder(reminder.notificationId);
+        await db
+          .update(reminders)
+          .set({ enabled: false, notificationId: null })
+          .where(eq(reminders.id, reminder.id));
+      }
+      return;
+    }
+
+    const settings = await db.query.appSettings.findFirst();
+    const daysBefore = settings?.reminderDaysBefore ?? 3;
+    const notificationId = await scheduleLoanReminder({
+      loanName: loan.name,
+      amountLabel: formatMoney(loan.monthlyPaymentCents),
+      dueDate: loan.nextDueDate,
+      daysBefore,
+    });
+    await db.insert(reminders).values({
+      loanId: loan.id,
+      daysBefore,
+      enabled: true,
+      notificationId,
+    });
+  }
+
   async function handleMarkPaid() {
     if (nextUnpaidIndex === null) return;
 
@@ -75,6 +134,7 @@ export default function LoanDetailScreen() {
     const now = new Date();
     const newPaidCount = paidCount + 1;
     const isFullyPaid = newPaidCount >= loan.termMonths;
+    const newDueDate = addMonths(loan.startDate, isFullyPaid ? newPaidCount - 1 : newPaidCount);
 
     await db.insert(payments).values({
       loanId: loan.id,
@@ -87,31 +147,53 @@ export default function LoanDetailScreen() {
     await db
       .update(loans)
       .set({
-        nextDueDate: addMonths(loan.startDate, isFullyPaid ? newPaidCount - 1 : newPaidCount),
+        nextDueDate: newDueDate,
         status: isFullyPaid ? 'paid_off' : 'active',
         updatedAt: now,
       })
       .where(eq(loans.id, loan.id));
+
+    await rescheduleReminder(isFullyPaid ? null : newDueDate);
   }
 
   async function handleUndoLastPayment() {
     if (lastPaidIndex === null) return;
     const lastPayment = loan.payments[lastPaidIndex];
+    const newDueDate = addMonths(loan.startDate, lastPaidIndex);
 
     await db.delete(payments).where(eq(payments.id, lastPayment.id));
     await db
       .update(loans)
       .set({
-        nextDueDate: addMonths(loan.startDate, lastPaidIndex),
+        nextDueDate: newDueDate,
         status: 'active',
         updatedAt: new Date(),
       })
       .where(eq(loans.id, loan.id));
+
+    await rescheduleReminder(newDueDate);
   }
 
   return (
     <ThemedView style={styles.container}>
-      <Stack.Screen options={{ title: loan.name }} />
+      <Stack.Screen
+        options={{
+          title: loan.name,
+          headerRight: () => (
+            <Pressable onPress={handleToggleReminder} hitSlop={8}>
+              <SymbolView
+                tintColor={theme.text}
+                name={{
+                  ios: reminder?.enabled ? 'bell.fill' : 'bell',
+                  android: reminder?.enabled ? 'notifications_active' : 'notifications_none',
+                  web: reminder?.enabled ? 'notifications_active' : 'notifications_none',
+                }}
+                size={20}
+              />
+            </Pressable>
+          ),
+        }}
+      />
       <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
         <View style={styles.content}>
           <FlatList

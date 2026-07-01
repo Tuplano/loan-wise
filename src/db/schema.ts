@@ -73,6 +73,12 @@ export const reminders = sqliteTable('reminders', {
     .$defaultFn(() => new Date()),
 });
 
+export const appSettings = sqliteTable('app_settings', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  remindersEnabled: integer('reminders_enabled', { mode: 'boolean' }).notNull().default(true),
+  reminderDaysBefore: integer('reminder_days_before').notNull().default(3),
+});
+
 export const categoriesRelations = relations(categories, ({ many }) => ({
   loans: many(loans),
 }));

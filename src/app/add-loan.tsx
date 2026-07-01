@@ -15,9 +15,10 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
 import { db } from '@/db/client';
-import { loans } from '@/db/schema';
+import { loans, reminders } from '@/db/schema';
 import { useTheme } from '@/hooks/use-theme';
 import { formatMoney } from '@/lib/format';
+import { scheduleLoanReminder } from '@/lib/notifications';
 
 function toCents(value: string) {
   const amount = Number.parseFloat(value);
@@ -63,18 +64,37 @@ export default function AddLoanScreen() {
     setSubmitting(true);
 
     const now = new Date();
-    await db.insert(loans).values({
-      name: name.trim(),
-      lender: lender.trim() || null,
-      categoryId,
-      principalCents: principalCents!,
-      monthlyPaymentCents: monthlyPaymentCents!,
-      interestRate: Number.parseFloat(interestRate) || 0,
-      termMonths: termMonthsValue,
-      startDate: now,
-      nextDueDate: now,
-      notes: notes.trim() || null,
-    });
+    const [createdLoan] = await db
+      .insert(loans)
+      .values({
+        name: name.trim(),
+        lender: lender.trim() || null,
+        categoryId,
+        principalCents: principalCents!,
+        monthlyPaymentCents: monthlyPaymentCents!,
+        interestRate: Number.parseFloat(interestRate) || 0,
+        termMonths: termMonthsValue,
+        startDate: now,
+        nextDueDate: now,
+        notes: notes.trim() || null,
+      })
+      .returning();
+
+    const settings = await db.query.appSettings.findFirst();
+    if (settings?.remindersEnabled) {
+      const notificationId = await scheduleLoanReminder({
+        loanName: createdLoan.name,
+        amountLabel: formatMoney(createdLoan.monthlyPaymentCents),
+        dueDate: createdLoan.nextDueDate,
+        daysBefore: settings.reminderDaysBefore,
+      });
+      await db.insert(reminders).values({
+        loanId: createdLoan.id,
+        daysBefore: settings.reminderDaysBefore,
+        enabled: true,
+        notificationId,
+      });
+    }
 
     setSubmitting(false);
     router.back();
