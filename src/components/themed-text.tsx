@@ -56,7 +56,6 @@ const styles = StyleSheet.create({
     fontFamily: ManropeFamily[500],
     fontSize: 16,
     lineHeight: 22,
-    color: undefined,
   },
   numeric: {
     fontVariant: ['tabular-nums'],

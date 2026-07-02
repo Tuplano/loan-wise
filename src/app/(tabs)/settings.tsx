@@ -1,7 +1,9 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { eq } from 'drizzle-orm';
+import { useRouter } from 'expo-router';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useState } from 'react';
+import Constants from 'expo-constants';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -9,55 +11,31 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { db } from '@/db/client';
-import { appSettings, categories } from '@/db/schema';
-import { categoryColors } from '@/db/seed';
+import { appSettings, type AppearanceMode } from '@/db/schema';
 import { useTheme } from '@/hooks/use-theme';
+import { CURRENCY_OPTIONS, type CurrencyCode } from '@/lib/currency';
 import { ensureNotificationPermission, isNotificationsAvailable } from '@/lib/notifications';
 
 const MIN_DAYS_BEFORE = 1;
 const MAX_DAYS_BEFORE = 30;
 
+const APPEARANCE_OPTIONS: { value: AppearanceMode; label: string }[] = [
+  { value: 'system', label: 'System' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
+];
+
 export default function SettingsScreen() {
   const theme = useTheme();
+  const router = useRouter();
   const { data: categoryList } = useLiveQuery(db.query.categories.findMany());
   const { data: settings } = useLiveQuery(db.query.appSettings.findFirst());
 
-  const [newName, setNewName] = useState('');
-  const [newColor, setNewColor] = useState(categoryColors[0]);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editingName, setEditingName] = useState('');
-
-  async function handleAdd() {
-    const name = newName.trim();
-    if (!name) return;
-    await db.insert(categories).values({ name, color: newColor });
-    setNewName('');
-    setNewColor(categoryColors[0]);
-  }
-
-  function startEditing(id: number, currentName: string) {
-    setEditingId(id);
-    setEditingName(currentName);
-  }
-
-  async function commitEditing() {
-    const name = editingName.trim();
-    if (editingId !== null && name) {
-      await db.update(categories).set({ name }).where(eq(categories.id, editingId));
-    }
-    setEditingId(null);
-  }
-
-  function handleDelete(id: number, name: string) {
-    Alert.alert('Delete category', `Delete "${name}"? Loans using it will become uncategorized.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => db.delete(categories).where(eq(categories.id, id)),
-      },
-    ]);
-  }
+  const [editingProfileField, setEditingProfileField] = useState<'name' | 'email' | null>(null);
+  const [profileDraft, setProfileDraft] = useState('');
+  const [expandedPicker, setExpandedPicker] = useState<'currency' | 'appearance' | null>(null);
+  const [editingInterestRate, setEditingInterestRate] = useState(false);
+  const [interestRateDraft, setInterestRateDraft] = useState('');
 
   async function handleToggleReminders(value: boolean) {
     if (!settings) return;
@@ -90,6 +68,64 @@ export default function SettingsScreen() {
     await db.update(appSettings).set({ reminderDaysBefore: next }).where(eq(appSettings.id, settings.id));
   }
 
+  function startEditingProfile(field: 'name' | 'email') {
+    if (!settings) return;
+    setEditingProfileField(field);
+    setProfileDraft(field === 'name' ? settings.displayName : (settings.email ?? ''));
+  }
+
+  async function commitProfileEdit() {
+    if (!settings || !editingProfileField) return;
+    const value = profileDraft.trim();
+    if (editingProfileField === 'name') {
+      await db
+        .update(appSettings)
+        .set({ displayName: value || 'You' })
+        .where(eq(appSettings.id, settings.id));
+    } else {
+      await db
+        .update(appSettings)
+        .set({ email: value || null })
+        .where(eq(appSettings.id, settings.id));
+    }
+    setEditingProfileField(null);
+  }
+
+  async function handleSelectCurrency(currency: CurrencyCode) {
+    if (!settings) return;
+    await db.update(appSettings).set({ currency }).where(eq(appSettings.id, settings.id));
+    setExpandedPicker(null);
+  }
+
+  async function handleSelectAppearance(mode: AppearanceMode) {
+    if (!settings) return;
+    await db.update(appSettings).set({ appearance: mode }).where(eq(appSettings.id, settings.id));
+    setExpandedPicker(null);
+  }
+
+  function startEditingInterestRate() {
+    if (!settings) return;
+    setInterestRateDraft(settings.defaultInterestRate ? String(settings.defaultInterestRate) : '');
+    setEditingInterestRate(true);
+  }
+
+  async function commitInterestRate() {
+    if (!settings) return;
+    const parsed = Number.parseFloat(interestRateDraft);
+    await db
+      .update(appSettings)
+      .set({ defaultInterestRate: Number.isFinite(parsed) ? Math.max(parsed, 0) : 0 })
+      .where(eq(appSettings.id, settings.id));
+    setEditingInterestRate(false);
+  }
+
+  const initials = (settings?.displayName ?? 'You')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('') || 'Y';
+
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
@@ -101,80 +137,165 @@ export default function SettingsScreen() {
             <ThemedText type="title">Settings</ThemedText>
           </View>
 
+          <View
+            style={[
+              styles.profileCard,
+              { backgroundColor: theme.card, borderColor: theme.border },
+            ]}>
+            <View style={[styles.avatar, { backgroundColor: theme.primaryDark }]}>
+              <ThemedText type="smallBold" style={styles.avatarText}>
+                {initials}
+              </ThemedText>
+            </View>
+            <View style={styles.profileFields}>
+              {editingProfileField === 'name' ? (
+                <TextInput
+                  value={profileDraft}
+                  onChangeText={setProfileDraft}
+                  autoFocus
+                  placeholder="Your name"
+                  placeholderTextColor={theme.textSecondary}
+                  onSubmitEditing={commitProfileEdit}
+                  onBlur={commitProfileEdit}
+                  style={[styles.profileNameInput, { color: theme.text }]}
+                />
+              ) : (
+                <Pressable onPress={() => startEditingProfile('name')}>
+                  <ThemedText type="smallBold" style={styles.profileName}>
+                    {settings?.displayName ?? 'You'}
+                  </ThemedText>
+                </Pressable>
+              )}
+              {editingProfileField === 'email' ? (
+                <TextInput
+                  value={profileDraft}
+                  onChangeText={setProfileDraft}
+                  autoFocus
+                  placeholder="you@email.com"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  placeholderTextColor={theme.textSecondary}
+                  onSubmitEditing={commitProfileEdit}
+                  onBlur={commitProfileEdit}
+                  style={[styles.profileEmailInput, { color: theme.textSecondary }]}
+                />
+              ) : (
+                <Pressable onPress={() => startEditingProfile('email')}>
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {settings?.email || 'Add email'}
+                  </ThemedText>
+                </Pressable>
+              )}
+            </View>
+          </View>
+
           <ThemedText type="sectionLabel" themeColor="textMuted" style={styles.sectionLabel}>
-            Categories
+            Preferences
           </ThemedText>
           <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
-            {categoryList.map((category) => {
-              const isEditing = editingId === category.id;
-              return (
-                <View key={category.id} style={[styles.row, { borderBottomColor: theme.divider }]}>
-                  <View style={[styles.dot, { backgroundColor: category.color ?? undefined }]} />
-                  {isEditing ? (
-                    <TextInput
-                      value={editingName}
-                      onChangeText={setEditingName}
-                      autoFocus
-                      onSubmitEditing={commitEditing}
-                      onBlur={commitEditing}
-                      style={[styles.editInput, { color: theme.text }]}
-                    />
-                  ) : (
-                    <Pressable
-                      style={styles.rowLabel}
-                      onPress={() => startEditing(category.id, category.name)}>
-                      <ThemedText>{category.name}</ThemedText>
-                    </Pressable>
-                  )}
-                  <Pressable
-                    hitSlop={8}
-                    onPress={() => handleDelete(category.id, category.name)}
-                    style={({ pressed }) => pressed && styles.pressed}>
-                    <SymbolView
-                      tintColor={theme.textSecondary}
-                      name={{ ios: 'trash', android: 'delete', web: 'delete' }}
-                      size={18}
-                    />
-                  </Pressable>
-                </View>
-              );
-            })}
-
-            <View style={styles.addRowGroup}>
-              <View style={styles.colorRow}>
-                {categoryColors.map((color) => (
-                  <Pressable key={color} onPress={() => setNewColor(color)}>
-                    <View
-                      style={[
-                        styles.colorSwatch,
-                        { backgroundColor: color },
-                        newColor === color && [
-                          styles.colorSwatchSelected,
-                          { borderColor: color },
-                        ],
-                      ]}
-                    />
-                  </Pressable>
-                ))}
-              </View>
-              <View style={styles.addRow}>
-                <TextInput
-                  value={newName}
-                  onChangeText={setNewName}
-                  placeholder="Add category"
-                  placeholderTextColor={theme.textSecondary}
-                  onSubmitEditing={handleAdd}
-                  style={[styles.input, { color: theme.text }]}
+            <Pressable
+              onPress={() => setExpandedPicker(expandedPicker === 'currency' ? null : 'currency')}>
+              <View style={[styles.row, { borderBottomColor: theme.divider }]}>
+                <IconBadge
+                  icon={{ ios: 'coloncurrencysign.circle', android: 'payments', web: 'payments' }}
+                  tint={theme.primary}
+                  bg={theme.primaryTint}
                 />
-                <Pressable onPress={handleAdd} hitSlop={8}>
-                  <SymbolView
-                    tintColor={theme.primary}
-                    name={{ ios: 'plus.circle.fill', android: 'add_circle', web: 'add_circle' }}
-                    size={26}
-                  />
-                </Pressable>
+                <ThemedText style={styles.rowLabel}>Currency</ThemedText>
+                <ThemedText type="smallBold" themeColor="textSecondary">
+                  {settings?.currency ?? 'PHP'}
+                </ThemedText>
+                <SymbolView
+                  tintColor={theme.textMuted}
+                  name={{
+                    ios: expandedPicker === 'currency' ? 'chevron.up' : 'chevron.down',
+                    android: 'expand_more',
+                    web: 'expand_more',
+                  }}
+                  size={16}
+                  style={styles.chevron}
+                />
               </View>
-            </View>
+            </Pressable>
+            {expandedPicker === 'currency' && (
+              <View style={[styles.optionRow, { borderBottomColor: theme.divider }]}>
+                {CURRENCY_OPTIONS.map((option) => {
+                  const selected = settings?.currency === option.code;
+                  return (
+                    <Pressable key={option.code} onPress={() => handleSelectCurrency(option.code)}>
+                      <View
+                        style={[
+                          styles.optionChip,
+                          selected
+                            ? { backgroundColor: theme.primary }
+                            : { backgroundColor: theme.backgroundElement },
+                        ]}>
+                        <ThemedText
+                          type="smallBold"
+                          style={selected ? styles.optionChipTextSelected : undefined}>
+                          {option.code}
+                        </ThemedText>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
+            <Pressable
+              onPress={() => setExpandedPicker(expandedPicker === 'appearance' ? null : 'appearance')}>
+              <View
+                style={[
+                  styles.row,
+                  expandedPicker === 'appearance' && { borderBottomColor: theme.divider },
+                  expandedPicker !== 'appearance' && styles.rowNoBorder,
+                ]}>
+                <IconBadge
+                  icon={{ ios: 'circle.lefthalf.filled', android: 'contrast', web: 'contrast' }}
+                  tint="#6B4FBB"
+                  bg="#F0EDF9"
+                />
+                <ThemedText style={styles.rowLabel}>Appearance</ThemedText>
+                <ThemedText type="smallBold" themeColor="textSecondary">
+                  {APPEARANCE_OPTIONS.find((o) => o.value === (settings?.appearance ?? 'system'))
+                    ?.label ?? 'System'}
+                </ThemedText>
+                <SymbolView
+                  tintColor={theme.textMuted}
+                  name={{
+                    ios: expandedPicker === 'appearance' ? 'chevron.up' : 'chevron.down',
+                    android: 'expand_more',
+                    web: 'expand_more',
+                  }}
+                  size={16}
+                  style={styles.chevron}
+                />
+              </View>
+            </Pressable>
+            {expandedPicker === 'appearance' && (
+              <View style={styles.optionRow}>
+                {APPEARANCE_OPTIONS.map((option) => {
+                  const selected = (settings?.appearance ?? 'system') === option.value;
+                  return (
+                    <Pressable key={option.value} onPress={() => handleSelectAppearance(option.value)}>
+                      <View
+                        style={[
+                          styles.optionChip,
+                          selected
+                            ? { backgroundColor: theme.primary }
+                            : { backgroundColor: theme.backgroundElement },
+                        ]}>
+                        <ThemedText
+                          type="smallBold"
+                          style={selected ? styles.optionChipTextSelected : undefined}>
+                          {option.label}
+                        </ThemedText>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
           </View>
 
           <ThemedText type="sectionLabel" themeColor="textMuted" style={styles.sectionLabel}>
@@ -195,7 +316,7 @@ export default function SettingsScreen() {
                 thumbColor="#ffffff"
               />
             </View>
-            <View style={styles.row}>
+            <View style={[styles.row, styles.rowNoBorder]}>
               <IconBadge
                 icon={{ ios: 'calendar', android: 'event', web: 'event' }}
                 tint={theme.primary}
@@ -227,6 +348,82 @@ export default function SettingsScreen() {
                   />
                 </Pressable>
               </View>
+            </View>
+          </View>
+
+          <ThemedText type="sectionLabel" themeColor="textMuted" style={styles.sectionLabel}>
+            Loan defaults
+          </ThemedText>
+          <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={[styles.row, { borderBottomColor: theme.divider }]}>
+              <IconBadge
+                icon={{ ios: 'percent', android: 'percent', web: 'percent' }}
+                tint="#3F5B75"
+                bg="#E8EEF4"
+              />
+              <ThemedText style={styles.rowLabel}>Default interest rate</ThemedText>
+              {editingInterestRate ? (
+                <TextInput
+                  value={interestRateDraft}
+                  onChangeText={setInterestRateDraft}
+                  autoFocus
+                  keyboardType="decimal-pad"
+                  placeholder="0"
+                  placeholderTextColor={theme.textSecondary}
+                  onSubmitEditing={commitInterestRate}
+                  onBlur={commitInterestRate}
+                  style={[styles.rateInput, { color: theme.text }]}
+                />
+              ) : (
+                <Pressable onPress={startEditingInterestRate} style={styles.rowValueGroup}>
+                  <ThemedText type="smallBold" themeColor="textSecondary">
+                    {settings?.defaultInterestRate ?? 0}% / mo
+                  </ThemedText>
+                  <SymbolView
+                    tintColor={theme.textMuted}
+                    name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
+                    size={14}
+                    style={styles.chevron}
+                  />
+                </Pressable>
+              )}
+            </View>
+
+            <Pressable onPress={() => router.push('/categories')}>
+              <View style={[styles.row, styles.rowNoBorder]}>
+                <IconBadge
+                  icon={{ ios: 'square.grid.2x2', android: 'grid_view', web: 'grid_view' }}
+                  tint={theme.primary}
+                  bg={theme.primaryTint}
+                />
+                <ThemedText style={styles.rowLabel}>Categories</ThemedText>
+                <ThemedText type="smallBold" themeColor="textSecondary">
+                  {categoryList.length}
+                </ThemedText>
+                <SymbolView
+                  tintColor={theme.textMuted}
+                  name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
+                  size={14}
+                  style={styles.chevron}
+                />
+              </View>
+            </Pressable>
+          </View>
+
+          <ThemedText type="sectionLabel" themeColor="textMuted" style={styles.sectionLabel}>
+            About
+          </ThemedText>
+          <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={[styles.row, styles.rowNoBorder]}>
+              <IconBadge
+                icon={{ ios: 'info.circle', android: 'info', web: 'info' }}
+                tint={theme.textSecondary}
+                bg={theme.backgroundElement}
+              />
+              <ThemedText style={styles.rowLabel}>About Loan Wise</ThemedText>
+              <ThemedText type="smallBold" themeColor="textSecondary">
+                v{Constants.expoConfig?.version ?? '1.0.0'}
+              </ThemedText>
             </View>
           </View>
         </ScrollView>
@@ -271,6 +468,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.four,
     paddingVertical: Spacing.three,
   },
+  profileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.three,
+    marginHorizontal: Spacing.three,
+    borderWidth: 1,
+    borderRadius: Radii.card - 2,
+    padding: Spacing.three,
+  },
+  avatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+  },
+  profileFields: {
+    flex: 1,
+    gap: 2,
+  },
+  profileName: {
+    fontSize: 17,
+  },
+  profileNameInput: {
+    fontSize: 17,
+    fontWeight: '700',
+    paddingVertical: 0,
+  },
+  profileEmailInput: {
+    fontSize: 13,
+    paddingVertical: 0,
+  },
   sectionLabel: {
     paddingHorizontal: Spacing.four,
     paddingBottom: Spacing.two,
@@ -290,8 +523,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.three,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  rowNoBorder: {
+    borderBottomWidth: 0,
+  },
   rowLabel: {
     flex: 1,
+  },
+  chevron: {
+    marginLeft: Spacing.one,
+  },
+  rowValueGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  optionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.two,
+    paddingHorizontal: Spacing.three,
+    paddingBottom: Spacing.three,
+  },
+  optionChip: {
+    paddingHorizontal: Spacing.three - 1,
+    paddingVertical: Spacing.two - 1,
+    borderRadius: Radii.pill,
+  },
+  optionChipTextSelected: {
+    color: '#FFFFFF',
+  },
+  rateInput: {
+    fontSize: 15,
+    fontWeight: '700',
+    minWidth: 60,
+    textAlign: 'right',
+    paddingVertical: 0,
   },
   iconBadge: {
     width: 32,
@@ -300,44 +565,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  editInput: {
-    flex: 1,
-    fontSize: 16,
-    paddingVertical: 0,
-  },
   pressed: {
     opacity: 0.6,
-  },
-  addRowGroup: {
-    gap: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.three,
-  },
-  colorRow: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-  },
-  colorSwatch: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-  },
-  colorSwatchSelected: {
-    borderWidth: 2,
-  },
-  addRow: {
-    flexDirection: 'row',
-    gap: Spacing.two,
-    alignItems: 'center',
-  },
-  input: {
-    flex: 1,
-    fontSize: 16,
   },
   stepper: {
     flexDirection: 'row',

@@ -7,6 +7,7 @@ import { PillBadge } from '@/components/ui/pill-badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Radii, Spacing } from '@/constants/theme';
 import type { LoanStatus } from '@/db/schema';
+import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDate } from '@/lib/date';
 import { formatMoney } from '@/lib/format';
@@ -45,10 +46,11 @@ export function LoanRow({
   onDelete,
 }: LoanRowProps) {
   const theme = useTheme();
+  const currency = useCurrency();
   const progress = principalCents > 0 ? 1 - remainingCents / principalCents : 0;
-  const isDueSoon =
-    status === 'active' &&
-    (nextDueDate.getTime() - Date.now()) / 86_400_000 <= 5;
+  const daysUntilDue = (nextDueDate.getTime() - Date.now()) / 86_400_000;
+  const isOverdue = status === 'active' && daysUntilDue < 0;
+  const isDueSoon = status === 'active' && !isOverdue && daysUntilDue <= 5;
 
   return (
     <Pressable onPress={onPress} style={({ pressed }) => pressed && styles.pressed}>
@@ -62,6 +64,7 @@ export function LoanRow({
               {lender || 'No lender set'}
             </ThemedText>
           </View>
+          {isOverdue && <PillBadge label="Overdue" tone="danger" />}
           {categoryName ? (
             <PillBadge label={categoryName} color={categoryColor ?? undefined} />
           ) : (
@@ -80,10 +83,10 @@ export function LoanRow({
 
         <View style={styles.amountRow}>
           <ThemedText type="subtitle" numeric>
-            {formatMoney(remainingCents)}
+            {formatMoney(remainingCents, currency)}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary" numeric>
-            of {formatMoney(principalCents)}
+            of {formatMoney(principalCents, currency)}
           </ThemedText>
         </View>
 
@@ -95,17 +98,21 @@ export function LoanRow({
               Monthly
             </ThemedText>
             <ThemedText type="smallBold" numeric>
-              {formatMoney(monthlyPaymentCents)}
+              {formatMoney(monthlyPaymentCents, currency)}
             </ThemedText>
           </View>
           <View style={styles.footerRight}>
             <ThemedText type="small" themeColor="textSecondary">
-              {status === 'paid_off' ? 'Status' : 'Next due'}
+              {status === 'paid_off' ? 'Status' : isOverdue ? 'Overdue' : 'Next due'}
             </ThemedText>
             <ThemedText
               type="smallBold"
-              style={isDueSoon ? { color: theme.danger } : undefined}>
-              {status === 'paid_off' ? 'Paid off' : formatDate(nextDueDate)}
+              style={isOverdue || isDueSoon ? { color: theme.danger } : undefined}>
+              {status === 'paid_off'
+                ? 'Paid off'
+                : isOverdue
+                  ? `${formatDate(nextDueDate)} · ${Math.abs(Math.floor(daysUntilDue))}d late`
+                  : formatDate(nextDueDate)}
             </ThemedText>
           </View>
         </View>

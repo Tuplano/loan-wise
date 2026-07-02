@@ -53,6 +53,7 @@ export default function RootLayout() {
           <Stack.Screen name="add-loan" options={{ presentation: 'modal', title: 'Add Loan' }} />
           <Stack.Screen name="loan/[id]/index" options={{ title: 'Loan' }} />
           <Stack.Screen name="loan/[id]/edit" options={{ title: 'Edit Loan' }} />
+          <Stack.Screen name="categories" options={{ title: 'Categories' }} />
         </Stack>
       )}
     </ThemeProvider>

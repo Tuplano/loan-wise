@@ -12,6 +12,7 @@ import { PillBadge } from '@/components/ui/pill-badge';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { BottomTabInset, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { db } from '@/db/client';
+import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDate } from '@/lib/date';
 import { formatMoney } from '@/lib/format';
@@ -26,6 +27,7 @@ function greeting() {
 
 export default function DashboardScreen() {
   const theme = useTheme();
+  const currency = useCurrency();
   const router = useRouter();
 
   const { data: loans } = useLiveQuery(db.query.loans.findMany({ with: { payments: true, category: true } }));
@@ -84,7 +86,7 @@ export default function DashboardScreen() {
               }
               iconBg={theme.dangerTint}
               label="Due this month"
-              value={formatMoney(monthlyDueCents)}
+              value={formatMoney(monthlyDueCents, currency)}
             />
             <StatCard
               icon={
@@ -96,7 +98,7 @@ export default function DashboardScreen() {
               }
               iconBg={theme.primaryTint}
               label="Paid this month"
-              value={formatMoney(paidThisMonthCents)}
+              value={formatMoney(paidThisMonthCents, currency)}
             />
           </View>
 
@@ -109,11 +111,13 @@ export default function DashboardScreen() {
                 {daysUntilDue !== null && (
                   <PillBadge
                     label={
-                      daysUntilDue <= 0
-                        ? 'due now'
-                        : daysUntilDue === 1
-                          ? 'in 1 day'
-                          : `in ${daysUntilDue} days`
+                      daysUntilDue < 0
+                        ? `${Math.abs(daysUntilDue)}d overdue`
+                        : daysUntilDue === 0
+                          ? 'due today'
+                          : daysUntilDue === 1
+                            ? 'in 1 day'
+                            : `in ${daysUntilDue} days`
                     }
                     tone={daysUntilDue <= 3 ? 'danger' : 'primary'}
                   />
@@ -129,7 +133,7 @@ export default function DashboardScreen() {
                   </ThemedText>
                 </View>
                 <ThemedText type="subtitle" numeric style={{ color: theme.primaryDark }}>
-                  {formatMoney(nextDue.monthlyPaymentCents)}
+                  {formatMoney(nextDue.monthlyPaymentCents, currency)}
                 </ThemedText>
               </View>
               <PrimaryButton label="Log payment" onPress={() => router.push(`/loan/${nextDue.id}`)} />

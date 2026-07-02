@@ -4,6 +4,7 @@ import { ThemedText } from './themed-text';
 
 import { ProgressRing } from '@/components/ui/progress-ring';
 import { Radii, Spacing } from '@/constants/theme';
+import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import { formatMoney } from '@/lib/format';
 
@@ -23,6 +24,7 @@ export function ActiveLoanRingRow({
   onPress,
 }: ActiveLoanRingRowProps) {
   const theme = useTheme();
+  const currency = useCurrency();
 
   return (
     <Pressable onPress={onPress} style={({ pressed }) => pressed && styles.pressed}>
@@ -44,7 +46,7 @@ export function ActiveLoanRingRow({
 
         <View style={styles.trailing}>
           <ThemedText type="smallBold" numeric style={styles.name}>
-            {formatMoney(remainingCents)}
+            {formatMoney(remainingCents, currency)}
           </ThemedText>
           <ThemedText type="small" themeColor="textSecondary">
             remaining

@@ -13,17 +13,16 @@ export default function AddLoanScreen() {
     <LoanForm
       title="Add Loan"
       onSubmit={async (values) => {
-        const now = new Date();
         const [createdLoan] = await db
           .insert(loans)
-          .values({ ...values, startDate: now, nextDueDate: now })
+          .values({ ...values, nextDueDate: values.firstPaymentDate })
           .returning();
 
         const settings = await db.query.appSettings.findFirst();
         if (settings?.remindersEnabled) {
           const notificationId = await scheduleLoanReminder({
             loanName: createdLoan.name,
-            amountLabel: formatMoney(createdLoan.monthlyPaymentCents),
+            amountLabel: formatMoney(createdLoan.monthlyPaymentCents, settings.currency),
             dueDate: createdLoan.nextDueDate,
             daysBefore: settings.reminderDaysBefore,
           });

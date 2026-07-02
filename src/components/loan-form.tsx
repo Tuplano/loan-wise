@@ -1,7 +1,7 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { Stack } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -15,9 +15,11 @@ import {
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 
+import { DateField } from '@/components/ui/date-field';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { Radii, Spacing } from '@/constants/theme';
 import { db } from '@/db/client';
+import { useAppSettings } from '@/hooks/use-app-settings';
 import { useTheme } from '@/hooks/use-theme';
 import { formatMoney } from '@/lib/format';
 
@@ -35,6 +37,8 @@ export type LoanFormValues = {
   interestRate: number;
   termMonths: number;
   notes: string | null;
+  startDate: Date;
+  firstPaymentDate: Date;
 };
 
 export type LoanFormInitialValues = {
@@ -45,6 +49,8 @@ export type LoanFormInitialValues = {
   termMonths: string;
   interestRate: string;
   notes: string | null;
+  startDate: Date;
+  firstPaymentDate: Date;
 };
 
 type LoanFormProps = {
@@ -57,6 +63,8 @@ type LoanFormProps = {
 export function LoanForm({ title, submitLabel = 'Save loan', initialValues, onSubmit }: LoanFormProps) {
   const theme = useTheme();
   const { data: categories } = useLiveQuery(db.query.categories.findMany());
+  const settings = useAppSettings();
+  const currency = settings?.currency ?? 'PHP';
 
   const [name, setName] = useState(initialValues?.name ?? '');
   const [lender, setLender] = useState(initialValues?.lender ?? '');
@@ -65,7 +73,19 @@ export function LoanForm({ title, submitLabel = 'Save loan', initialValues, onSu
   const [interestRate, setInterestRate] = useState(initialValues?.interestRate ?? '');
   const [termMonths, setTermMonths] = useState(initialValues?.termMonths ?? '');
   const [notes, setNotes] = useState(initialValues?.notes ?? '');
+  const [startDate, setStartDate] = useState(initialValues?.startDate ?? new Date());
+  const [firstPaymentDate, setFirstPaymentDate] = useState(
+    initialValues?.firstPaymentDate ?? new Date()
+  );
   const [submitting, setSubmitting] = useState(false);
+
+  // Prefill new loans with the user's default interest rate once settings load —
+  // only when adding (no initialValues) and the user hasn't typed anything yet.
+  useEffect(() => {
+    if (!initialValues && interestRate === '' && settings && settings.defaultInterestRate > 0) {
+      setInterestRate(String(settings.defaultInterestRate));
+    }
+  }, [settings]);
 
   const principalCents = toCents(principal);
   const termMonthsValue = Number.parseInt(termMonths, 10);
@@ -105,6 +125,8 @@ export function LoanForm({ title, submitLabel = 'Save loan', initialValues, onSu
       interestRate: Number.parseFloat(interestRate) || 0,
       termMonths: termMonthsValue,
       notes: notes.trim() || null,
+      startDate,
+      firstPaymentDate,
     });
 
     setSubmitting(false);
@@ -129,7 +151,7 @@ export function LoanForm({ title, submitLabel = 'Save loan', initialValues, onSu
               Computed monthly payment
             </ThemedText>
             <ThemedText type="display" numeric style={styles.heroValue}>
-              {monthlyPaymentCents !== null ? formatMoney(monthlyPaymentCents) : '—'}
+              {monthlyPaymentCents !== null ? formatMoney(monthlyPaymentCents, currency) : '—'}
             </ThemedText>
             <View style={styles.heroBreakdownRow}>
               <View style={styles.heroBreakdownItem}>
@@ -137,7 +159,7 @@ export function LoanForm({ title, submitLabel = 'Save loan', initialValues, onSu
                   Base ÷ term
                 </ThemedText>
                 <ThemedText type="smallBold" numeric style={styles.heroBreakdownValue}>
-                  {basePaymentCents !== null ? formatMoney(basePaymentCents) : '—'}
+                  {basePaymentCents !== null ? formatMoney(basePaymentCents, currency) : '—'}
                 </ThemedText>
               </View>
               <View style={styles.heroBreakdownItem}>
@@ -145,7 +167,7 @@ export function LoanForm({ title, submitLabel = 'Save loan', initialValues, onSu
                   Interest {interestRate || 0}%
                 </ThemedText>
                 <ThemedText type="smallBold" numeric style={styles.heroBreakdownValue}>
-                  {interestPaymentCents !== null ? `+ ${formatMoney(interestPaymentCents)}` : '—'}
+                  {interestPaymentCents !== null ? `+ ${formatMoney(interestPaymentCents, currency)}` : '—'}
                 </ThemedText>
               </View>
             </View>
@@ -206,6 +228,19 @@ export function LoanForm({ title, submitLabel = 'Save loan', initialValues, onSu
               })}
             </ScrollView>
           </Field>
+
+          <View style={styles.row}>
+            <View style={styles.flex}>
+              <DateField label="Start date" value={startDate} onChange={setStartDate} />
+            </View>
+            <View style={styles.flex}>
+              <DateField
+                label="First payment due"
+                value={firstPaymentDate}
+                onChange={setFirstPaymentDate}
+              />
+            </View>
+          </View>
 
           <View style={styles.row}>
             <Field label="Principal" style={styles.flex}>

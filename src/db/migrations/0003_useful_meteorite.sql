@@ -1,0 +1,1 @@
+ALTER TABLE `loans` ADD `first_payment_date` integer;

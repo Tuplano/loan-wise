@@ -2,6 +2,7 @@ import { eq } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
+import { useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -13,11 +14,12 @@ import { ProgressRing } from '@/components/ui/progress-ring';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { db } from '@/db/client';
 import { loans, payments, reminders, type LoanStatus } from '@/db/schema';
+import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
-import { addMonths, formatDate } from '@/lib/date';
+import { addMonths, formatDate, ordinalSuffix } from '@/lib/date';
 import { formatMoney } from '@/lib/format';
 import { cancelReminder, scheduleLoanReminder } from '@/lib/notifications';
-import { getScheduleForLoan } from '@/lib/schedule';
+import { getScheduleForLoan, scheduleAnchor } from '@/lib/schedule';
 
 const statusLabel: Record<LoanStatus, string> = {
   active: 'Active',
@@ -29,7 +31,9 @@ export default function LoanDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const loanId = Number(id);
   const theme = useTheme();
+  const currency = useCurrency();
   const router = useRouter();
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   const { data: loanResult } = useLiveQuery(
     db.query.loans.findFirst({
@@ -78,7 +82,7 @@ export default function LoanDetailScreen() {
     const notificationId = newDueDate
       ? await scheduleLoanReminder({
           loanName: loan.name,
-          amountLabel: formatMoney(loan.monthlyPaymentCents),
+          amountLabel: formatMoney(loan.monthlyPaymentCents, currency),
           dueDate: newDueDate,
           daysBefore: reminder.daysBefore,
         })
@@ -93,7 +97,7 @@ export default function LoanDetailScreen() {
       if (nextEnabled) {
         const notificationId = await scheduleLoanReminder({
           loanName: loan.name,
-          amountLabel: formatMoney(loan.monthlyPaymentCents),
+          amountLabel: formatMoney(loan.monthlyPaymentCents, currency),
           dueDate: loan.nextDueDate,
           daysBefore: reminder.daysBefore,
         });
@@ -115,7 +119,7 @@ export default function LoanDetailScreen() {
     const daysBefore = settings?.reminderDaysBefore ?? 3;
     const notificationId = await scheduleLoanReminder({
       loanName: loan.name,
-      amountLabel: formatMoney(loan.monthlyPaymentCents),
+      amountLabel: formatMoney(loan.monthlyPaymentCents, currency),
       dueDate: loan.nextDueDate,
       daysBefore,
     });
@@ -128,51 +132,62 @@ export default function LoanDetailScreen() {
   }
 
   async function handleMarkPaid() {
-    if (nextUnpaidIndex === null) return;
+    if (nextUnpaidIndex === null || isProcessingPayment) return;
+    setIsProcessingPayment(true);
 
-    const principalPortionCents = Math.round(loan.principalCents / loan.termMonths);
-    const interestPortionCents = loan.monthlyPaymentCents - principalPortionCents;
-    const now = new Date();
-    const newPaidCount = paidCount + 1;
-    const isFullyPaid = newPaidCount >= loan.termMonths;
-    const newDueDate = addMonths(loan.startDate, isFullyPaid ? newPaidCount - 1 : newPaidCount);
+    try {
+      const principalPortionCents = Math.round(loan.principalCents / loan.termMonths);
+      const interestPortionCents = loan.monthlyPaymentCents - principalPortionCents;
+      const now = new Date();
+      const newPaidCount = paidCount + 1;
+      const isFullyPaid = newPaidCount >= loan.termMonths;
+      const newDueDate = addMonths(scheduleAnchor(loan), isFullyPaid ? newPaidCount - 1 : newPaidCount);
 
-    await db.insert(payments).values({
-      loanId: loan.id,
-      amountCents: loan.monthlyPaymentCents,
-      principalPortionCents,
-      interestPortionCents,
-      paidAt: now,
-    });
+      await db.insert(payments).values({
+        loanId: loan.id,
+        amountCents: loan.monthlyPaymentCents,
+        principalPortionCents,
+        interestPortionCents,
+        paidAt: now,
+      });
 
-    await db
-      .update(loans)
-      .set({
-        nextDueDate: newDueDate,
-        status: isFullyPaid ? 'paid_off' : 'active',
-        updatedAt: now,
-      })
-      .where(eq(loans.id, loan.id));
+      await db
+        .update(loans)
+        .set({
+          nextDueDate: newDueDate,
+          status: isFullyPaid ? 'paid_off' : 'active',
+          updatedAt: now,
+        })
+        .where(eq(loans.id, loan.id));
 
-    await rescheduleReminder(isFullyPaid ? null : newDueDate);
+      await rescheduleReminder(isFullyPaid ? null : newDueDate);
+    } finally {
+      setIsProcessingPayment(false);
+    }
   }
 
   async function handleUndoLastPayment() {
-    if (lastPaidIndex === null) return;
-    const lastPayment = loan.payments[lastPaidIndex];
-    const newDueDate = addMonths(loan.startDate, lastPaidIndex);
+    if (lastPaidIndex === null || isProcessingPayment) return;
+    setIsProcessingPayment(true);
 
-    await db.delete(payments).where(eq(payments.id, lastPayment.id));
-    await db
-      .update(loans)
-      .set({
-        nextDueDate: newDueDate,
-        status: 'active',
-        updatedAt: new Date(),
-      })
-      .where(eq(loans.id, loan.id));
+    try {
+      const lastPayment = loan.payments[lastPaidIndex];
+      const newDueDate = addMonths(scheduleAnchor(loan), lastPaidIndex);
 
-    await rescheduleReminder(newDueDate);
+      await db.delete(payments).where(eq(payments.id, lastPayment.id));
+      await db
+        .update(loans)
+        .set({
+          nextDueDate: newDueDate,
+          status: 'active',
+          updatedAt: new Date(),
+        })
+        .where(eq(loans.id, loan.id));
+
+      await rescheduleReminder(newDueDate);
+    } finally {
+      setIsProcessingPayment(false);
+    }
   }
 
   function handleDelete() {
@@ -246,6 +261,11 @@ export default function LoanDetailScreen() {
                       {loan.lender}
                     </ThemedText>
                   )}
+                  <ThemedText type="small" themeColor="textMuted">
+                    Started {formatDate(loan.startDate)} · Due every{' '}
+                    {scheduleAnchor(loan).getDate()}
+                    {ordinalSuffix(scheduleAnchor(loan).getDate())}
+                  </ThemedText>
                 </View>
 
                 <View style={styles.ringWrap}>
@@ -257,14 +277,14 @@ export default function LoanDetailScreen() {
                       {Math.round(paidOffProgress * 100)}%
                     </ThemedText>
                     <ThemedText type="small" themeColor="textSecondary" numeric>
-                      {formatMoney(principalPaidCents)} of {formatMoney(loan.principalCents)}
+                      {formatMoney(principalPaidCents, currency)} of {formatMoney(loan.principalCents, currency)}
                     </ThemedText>
                   </ProgressRing>
                 </View>
 
                 <View style={styles.statsGrid}>
-                  <StatCard label="Principal" value={formatMoney(loan.principalCents)} />
-                  <StatCard label="Monthly" value={formatMoney(loan.monthlyPaymentCents)} />
+                  <StatCard label="Principal" value={formatMoney(loan.principalCents, currency)} />
+                  <StatCard label="Monthly" value={formatMoney(loan.monthlyPaymentCents, currency)} />
                 </View>
 
                 <View style={[styles.breakdownCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -273,22 +293,22 @@ export default function LoanDetailScreen() {
                   </ThemedText>
                   <View style={styles.breakdownRow}>
                     <ThemedText type="small">
-                      Base ({formatMoney(loan.principalCents)} ÷ {loan.termMonths} mo)
+                      Base ({formatMoney(loan.principalCents, currency)} ÷ {loan.termMonths} mo)
                     </ThemedText>
                     <ThemedText type="smallBold" numeric>
-                      {formatMoney(basePaymentCents)}
+                      {formatMoney(basePaymentCents, currency)}
                     </ThemedText>
                   </View>
                   <View style={styles.breakdownRow}>
                     <ThemedText type="small">Interest ({loan.interestRate}% / mo)</ThemedText>
                     <ThemedText type="smallBold" numeric>
-                      {formatMoney(interestPaymentCents)}
+                      {formatMoney(interestPaymentCents, currency)}
                     </ThemedText>
                   </View>
                   <View style={[styles.breakdownRow, styles.breakdownTotal, { borderTopColor: theme.divider }]}>
                     <ThemedText type="smallBold">Monthly due</ThemedText>
                     <ThemedText type="smallBold" numeric style={{ color: theme.primaryDark }}>
-                      {formatMoney(loan.monthlyPaymentCents)}
+                      {formatMoney(loan.monthlyPaymentCents, currency)}
                     </ThemedText>
                   </View>
                 </View>
@@ -311,9 +331,10 @@ export default function LoanDetailScreen() {
               </View>
             }
             renderItem={({ item }) => {
-              const isNextUnpaid = item.index === nextUnpaidIndex;
               const isLastPaid = item.index === lastPaidIndex;
-              const interactive = isNextUnpaid || isLastPaid;
+              // Marking paid happens only through the "Log payment" button below —
+              // the row itself only supports tap-to-undo on the most recent payment.
+              const interactive = isLastPaid;
 
               const row = (
                 <View style={[styles.scheduleRow, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -342,7 +363,7 @@ export default function LoanDetailScreen() {
                   </View>
                   <View style={styles.scheduleTrailing}>
                     <ThemedText type="smallBold" numeric themeColor={item.paid ? 'text' : 'textSecondary'}>
-                      {formatMoney(item.amountCents)}
+                      {formatMoney(item.amountCents, currency)}
                     </ThemedText>
                     {!item.paid && (
                       <ThemedText type="small" themeColor="textSecondary">
@@ -357,7 +378,7 @@ export default function LoanDetailScreen() {
 
               return (
                 <Pressable
-                  onPress={isNextUnpaid ? handleMarkPaid : handleUndoLastPayment}
+                  onPress={handleUndoLastPayment}
                   style={({ pressed }) => pressed && styles.pressed}>
                   {row}
                 </Pressable>
@@ -368,7 +389,12 @@ export default function LoanDetailScreen() {
 
           {nextUnpaidIndex !== null && (
             <View style={[styles.footer, { backgroundColor: theme.background, borderTopColor: theme.border }]}>
-              <PrimaryButton label="Log payment" onPress={handleMarkPaid} size="large" />
+              <PrimaryButton
+                label="Log payment"
+                onPress={handleMarkPaid}
+                disabled={isProcessingPayment}
+                size="large"
+              />
             </View>
           )}
         </View>

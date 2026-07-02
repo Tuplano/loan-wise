@@ -7,9 +7,15 @@ type PaymentLike = {
 
 type LoanLike = {
   startDate: Date;
+  firstPaymentDate: Date | null;
   termMonths: number;
   monthlyPaymentCents: number;
 };
+
+/** The recurring schedule's anchor date — falls back to startDate for loans created before this field existed. */
+export function scheduleAnchor(loan: Pick<LoanLike, 'startDate' | 'firstPaymentDate'>) {
+  return loan.firstPaymentDate ?? loan.startDate;
+}
 
 export type ScheduleEntry = {
   index: number;
@@ -27,9 +33,11 @@ export function getScheduleForLoan<P extends PaymentLike>(
   loan: LoanLike,
   paymentsAscending: P[]
 ): (ScheduleEntry & { payment: P | null })[] {
+  const anchor = scheduleAnchor(loan);
+
   return Array.from({ length: loan.termMonths }, (_, index) => {
     const payment = paymentsAscending[index] ?? null;
-    const scheduledDate = addMonths(loan.startDate, index);
+    const scheduledDate = addMonths(anchor, index);
     const dueDate = payment ? payment.paidAt : scheduledDate;
     const daysLate = payment
       ? Math.max(0, Math.round((payment.paidAt.getTime() - scheduledDate.getTime()) / 86_400_000))
