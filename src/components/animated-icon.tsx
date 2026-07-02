@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import * as SplashScreen from 'expo-splash-screen';
 import { useState } from 'react';
-import { Dimensions, StyleSheet, View } from 'react-native';
+import { Dimensions, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, Keyframe } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
@@ -33,7 +33,11 @@ export function AnimatedSplashOverlay() {
     },
   });
 
-  const image = <Image style={styles.image} source={require('@/assets/images/expo-logo.png')} />;
+  const brand = (
+    <View style={styles.brand}>
+      <Text style={styles.wordmark}>Loan Wise</Text>
+    </View>
+  );
 
   return animate ? (
     <Animated.View
@@ -44,7 +48,7 @@ export function AnimatedSplashOverlay() {
         }
       })}
       style={styles.splashOverlay}>
-      {image}
+      {brand}
     </Animated.View>
   ) : (
     <View
@@ -54,7 +58,7 @@ export function AnimatedSplashOverlay() {
         });
       }}
       style={styles.splashOverlay}>
-      {image}
+      {brand}
     </View>
   );
 }
@@ -131,6 +135,15 @@ const styles = StyleSheet.create({
     width: 76,
     height: 71,
   },
+  brand: {
+    alignItems: 'center',
+  },
+  wordmark: {
+    color: '#FFFFFF',
+    fontSize: 30,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+  },
   background: {
     borderRadius: 40,
     experimental_backgroundImage: `linear-gradient(180deg, #3C9FFE, #0274DF)`,
@@ -140,7 +153,7 @@ const styles = StyleSheet.create({
   },
   splashOverlay: {
     ...StyleSheet.absoluteFill,
-    backgroundColor: '#208AEF',
+    backgroundColor: '#0B5D42',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 1000,

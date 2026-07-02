@@ -30,7 +30,9 @@ export function ActiveLoanRingRow({
   const currency = useCurrency();
 
   return (
-    <Animated.View entering={FadeInDown.duration(280).delay(Math.min(index * 40, 200))}>
+    <Animated.View
+      entering={FadeInDown.duration(280).delay(Math.min(index * 40, 200))}
+      style={styles.wrapper}>
       <Pressable onPress={onPress} style={({ pressed }) => pressed && styles.pressed}>
         <View style={[styles.row, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <ProgressRing progress={progress} size={46} strokeWidth={5}>
@@ -63,6 +65,9 @@ export function ActiveLoanRingRow({
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    marginBottom: Spacing.two + 2,
+  },
   pressed: {
     opacity: 0.75,
   },

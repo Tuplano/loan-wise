@@ -154,7 +154,7 @@ export default function DashboardScreen() {
               No active loans. Tap Loans to add one.
             </ThemedText>
           ) : (
-            <View style={styles.loanList}>
+            <View>
               {activeLoans.map((loan, index) => {
                 const principalPaid = loan.payments.reduce(
                   (paid, payment) => paid + (payment.isPaid ? payment.principalPortionCents : 0),
@@ -289,8 +289,5 @@ const styles = StyleSheet.create({
   },
   emptyRow: {
     paddingVertical: Spacing.two,
-  },
-  loanList: {
-    gap: Spacing.two + 2,
   },
 });
