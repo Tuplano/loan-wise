@@ -19,7 +19,7 @@ type LoanRowProps = {
   categoryName?: string | null;
   categoryColor?: string | null;
   principalCents: number;
-  remainingCents: number;
+  paidCents: number;
   monthlyPaymentCents: number;
   nextDueDate: Date;
   status: LoanStatus;
@@ -40,7 +40,7 @@ export function LoanRow({
   categoryName,
   categoryColor,
   principalCents,
-  remainingCents,
+  paidCents,
   monthlyPaymentCents,
   nextDueDate,
   status,
@@ -50,7 +50,7 @@ export function LoanRow({
 }: LoanRowProps) {
   const theme = useTheme();
   const currency = useCurrency();
-  const progress = principalCents > 0 ? 1 - remainingCents / principalCents : 0;
+  const progress = principalCents > 0 ? paidCents / principalCents : 0;
   const daysUntilDue = (nextDueDate.getTime() - Date.now()) / 86_400_000;
   const isOverdue = status === 'active' && daysUntilDue < 0;
   const isDueSoon = status === 'active' && !isOverdue && daysUntilDue <= 5;
@@ -87,10 +87,10 @@ export function LoanRow({
 
           <View style={styles.amountRow}>
             <ThemedText type="subtitle" numeric>
-              {formatMoney(remainingCents, currency)}
+              {formatMoney(paidCents, currency)}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary" numeric>
-              of {formatMoney(principalCents, currency)}
+              of {formatMoney(principalCents, currency)} paid
             </ThemedText>
           </View>
 

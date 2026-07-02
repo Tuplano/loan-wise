@@ -143,7 +143,6 @@ export default function LoansScreen() {
                 (paid, payment) => paid + (payment.isPaid ? payment.principalPortionCents : 0),
                 0
               );
-              const remainingCents = Math.max(item.principalCents - principalPaid, 0);
 
               return (
                 <LoanRow
@@ -152,7 +151,7 @@ export default function LoansScreen() {
                   categoryName={item.category?.name}
                   categoryColor={item.category?.color}
                   principalCents={item.principalCents}
-                  remainingCents={remainingCents}
+                  paidCents={principalPaid}
                   monthlyPaymentCents={item.monthlyPaymentCents}
                   nextDueDate={item.nextDueDate}
                   status={item.status}
