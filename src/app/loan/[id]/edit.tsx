@@ -1,10 +1,12 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Alert } from 'react-native';
 
 import { LoanForm } from '@/components/loan-form';
 import { db } from '@/db/client';
-import { loans } from '@/db/schema';
+import { loans, payments } from '@/db/schema';
+import { buildInstallmentSchedule, computeNextDueDate } from '@/lib/schedule';
 
 export default function EditLoanScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -32,15 +34,50 @@ export default function EditLoanScreen() {
         firstPaymentDate: loan.firstPaymentDate ?? loan.startDate,
       }}
       onSubmit={async (values) => {
-        // Only move the live "next due" pointer if no payments have landed yet —
-        // once the schedule is underway, editing the anchor shouldn't rewind progress.
-        const hasNoPayments = loan.payments.length === 0;
+        const paidRows = loan.payments.filter((payment) => payment.isPaid);
+        const maxPaidInstallment = paidRows.reduce(
+          (max, payment) => Math.max(max, payment.installmentNumber),
+          0
+        );
+
+        if (values.termMonths < maxPaidInstallment) {
+          Alert.alert(
+            'Term too short',
+            `Month ${maxPaidInstallment} is already marked paid, so the term can't be shorter than ${maxPaidInstallment} months.`
+          );
+          return;
+        }
+
+        const paidNumbers = new Set(paidRows.map((payment) => payment.installmentNumber));
+        const desiredSchedule = buildInstallmentSchedule(values);
+        const rowsToInsert = desiredSchedule
+          .filter((installment) => !paidNumbers.has(installment.installmentNumber))
+          .map((installment) => ({ loanId: loan.id, ...installment }));
+
+        // Unpaid installments are fully regenerated from the new term/amount/anchor;
+        // paid ones are left untouched so history doesn't get rewritten retroactively.
+        await db
+          .delete(payments)
+          .where(and(eq(payments.loanId, loan.id), eq(payments.isPaid, false)));
+        if (rowsToInsert.length > 0) {
+          await db.insert(payments).values(rowsToInsert);
+        }
+
+        const isFullyPaid = paidNumbers.size >= values.termMonths;
+        const nextDueDate = computeNextDueDate(
+          desiredSchedule.map((installment) => ({
+            installmentNumber: installment.installmentNumber,
+            dueDate: installment.dueDate,
+            isPaid: paidNumbers.has(installment.installmentNumber),
+          }))
+        );
 
         await db
           .update(loans)
           .set({
             ...values,
-            ...(hasNoPayments ? { nextDueDate: values.firstPaymentDate } : {}),
+            nextDueDate,
+            status: isFullyPaid ? 'paid_off' : 'active',
             updatedAt: new Date(),
           })
           .where(eq(loans.id, loan.id));

@@ -38,7 +38,7 @@ export default function DashboardScreen() {
   const totalPrincipalCents = activeLoans.reduce((sum, loan) => sum + loan.principalCents, 0);
   const paidPrincipalCents = activeLoans.reduce((sum, loan) => {
     const principalPaid = loan.payments.reduce(
-      (paid, payment) => paid + (payment.principalPortionCents ?? 0),
+      (paid, payment) => paid + (payment.isPaid ? payment.principalPortionCents : 0),
       0
     );
     return sum + Math.min(principalPaid, loan.principalCents);
@@ -155,9 +155,9 @@ export default function DashboardScreen() {
             </ThemedText>
           ) : (
             <View style={styles.loanList}>
-              {activeLoans.map((loan) => {
+              {activeLoans.map((loan, index) => {
                 const principalPaid = loan.payments.reduce(
-                  (paid, payment) => paid + (payment.principalPortionCents ?? 0),
+                  (paid, payment) => paid + (payment.isPaid ? payment.principalPortionCents : 0),
                   0
                 );
                 const remainingCents = Math.max(loan.principalCents - principalPaid, 0);
@@ -173,6 +173,7 @@ export default function DashboardScreen() {
                     subtitle={subtitle}
                     remainingCents={remainingCents}
                     progress={progress}
+                    index={index}
                     onPress={() => router.push(`/loan/${loan.id}`)}
                   />
                 );

@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useMemo } from 'react';
 import { Pressable, SectionList, StyleSheet, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -36,7 +37,7 @@ export default function PaymentsScreen() {
 
   const { data: loanList } = useLiveQuery(
     db.query.loans.findMany({
-      with: { payments: { orderBy: (fields, { asc }) => [asc(fields.paidAt)] } },
+      with: { payments: { orderBy: (fields, { asc }) => [asc(fields.installmentNumber)] } },
     })
   );
 
@@ -45,7 +46,7 @@ export default function PaymentsScreen() {
   const paidThisMonthCents = sumPaymentsInMonth(allPayments);
   const now = new Date();
   const madeThisMonth = activeLoans.filter((loan) =>
-    loan.payments.some((payment) => isSameMonth(payment.paidAt, now))
+    loan.payments.some((payment) => payment.isPaid && payment.paidAt && isSameMonth(payment.paidAt, now))
   );
   const remainingCents = activeLoans
     .filter((loan) => !madeThisMonth.includes(loan))
@@ -54,16 +55,16 @@ export default function PaymentsScreen() {
 
   const sections = useMemo(() => {
     const entries: PaymentEntry[] = loanList.flatMap((loan) =>
-      getScheduleForLoan(loan, loan.payments)
-        .filter((entry) => entry.paid && entry.payment)
+      getScheduleForLoan(loan.payments)
+        .filter((entry) => entry.paid)
         .map((entry) => ({
-          key: `${loan.id}-${entry.payment!.id}`,
+          key: `${loan.id}-${entry.payment.id}`,
           loanId: loan.id,
           loanName: loan.name,
-          paidAt: entry.payment!.paidAt,
-          amountCents: entry.payment!.amountCents,
-          principalPortionCents: entry.payment!.principalPortionCents ?? 0,
-          interestPortionCents: entry.payment!.interestPortionCents ?? 0,
+          paidAt: entry.payment.paidAt!,
+          amountCents: entry.payment.amountCents,
+          principalPortionCents: entry.payment.principalPortionCents,
+          interestPortionCents: entry.payment.interestPortionCents,
           onTime: entry.onTime,
           daysLate: entry.daysLate,
         }))
@@ -134,41 +135,44 @@ export default function PaymentsScreen() {
                 {section.title}
               </ThemedText>
             )}
-            renderItem={({ item }) => (
-              <Pressable
-                onPress={() => router.push(`/loan/${item.loanId}`)}
-                style={({ pressed }) => pressed && styles.pressed}>
-                <View style={[styles.row, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            renderItem={({ item, index }) => (
+              <Animated.View entering={FadeInDown.duration(280).delay(Math.min(index * 30, 180))}>
+                <Pressable
+                  onPress={() => router.push(`/loan/${item.loanId}`)}
+                  style={({ pressed }) => pressed && styles.pressed}>
                   <View
-                    style={[
-                      styles.rowIcon,
-                      { backgroundColor: item.onTime ? theme.successTint : theme.dangerTint },
-                    ]}>
-                    <SymbolView
-                      tintColor={item.onTime ? theme.primary : theme.danger}
-                      name={
-                        item.onTime
-                          ? { ios: 'checkmark', android: 'check', web: 'check' }
-                          : { ios: 'clock', android: 'schedule', web: 'schedule' }
-                      }
-                      size={15}
-                    />
-                  </View>
-                  <View style={styles.rowLeading}>
-                    <ThemedText type="smallBold" numberOfLines={1} style={styles.rowTitle}>
-                      {item.loanName}
+                    style={[styles.row, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                    <View
+                      style={[
+                        styles.rowIcon,
+                        { backgroundColor: item.onTime ? theme.successTint : theme.dangerTint },
+                      ]}>
+                      <SymbolView
+                        tintColor={item.onTime ? theme.primary : theme.danger}
+                        name={
+                          item.onTime
+                            ? { ios: 'checkmark', android: 'check', web: 'check' }
+                            : { ios: 'clock', android: 'schedule', web: 'schedule' }
+                        }
+                        size={15}
+                      />
+                    </View>
+                    <View style={styles.rowLeading}>
+                      <ThemedText type="smallBold" numberOfLines={1} style={styles.rowTitle}>
+                        {item.loanName}
+                      </ThemedText>
+                      <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                        {item.onTime
+                          ? `${formatDate(item.paidAt)} · ${formatMoney(item.principalPortionCents, currency)} principal + ${formatMoney(item.interestPortionCents, currency)} int`
+                          : `${formatDate(item.paidAt)} · ${item.daysLate} day${item.daysLate === 1 ? '' : 's'} late`}
+                      </ThemedText>
+                    </View>
+                    <ThemedText type="smallBold" numeric style={{ color: theme.primaryDark }}>
+                      {formatMoney(item.amountCents, currency)}
                     </ThemedText>
-                    <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                      {item.onTime
-                        ? `${formatDate(item.paidAt)} · ${formatMoney(item.principalPortionCents, currency)} principal + ${formatMoney(item.interestPortionCents, currency)} int`
-                        : `${formatDate(item.paidAt)} · ${item.daysLate} day${item.daysLate === 1 ? '' : 's'} late`}
-                    </ThemedText>
                   </View>
-                  <ThemedText type="smallBold" numeric style={{ color: theme.primaryDark }}>
-                    {formatMoney(item.amountCents, currency)}
-                  </ThemedText>
-                </View>
-              </Pressable>
+                </Pressable>
+              </Animated.View>
             )}
           />
         </View>

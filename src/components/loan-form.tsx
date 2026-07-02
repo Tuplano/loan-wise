@@ -306,7 +306,8 @@ export function LoanForm({ title, submitLabel = 'Save loan', initialValues, onSu
           <PrimaryButton
             label={submitLabel}
             onPress={handleSubmit}
-            disabled={!isValid || submitting}
+            disabled={!isValid}
+            loading={submitting}
             size="large"
           />
         </View>

@@ -1,7 +1,11 @@
+import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
+import Animated, { useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
 
 import { useTheme } from '@/hooks/use-theme';
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 type ProgressRingProps = {
   progress: number;
@@ -26,6 +30,16 @@ export function ProgressRing({
   const circumference = 2 * Math.PI * radius;
   const center = size / 2;
 
+  const animatedProgress = useSharedValue(clamped);
+
+  useEffect(() => {
+    animatedProgress.value = withTiming(clamped, { duration: 600 });
+  }, [clamped, animatedProgress]);
+
+  const animatedProps = useAnimatedProps(() => ({
+    strokeDashoffset: circumference * (1 - animatedProgress.value),
+  }));
+
   return (
     <View style={{ width: size, height: size }}>
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
@@ -37,7 +51,7 @@ export function ProgressRing({
           stroke={trackColor ?? theme.divider}
           strokeWidth={strokeWidth}
         />
-        <Circle
+        <AnimatedCircle
           cx={center}
           cy={center}
           r={radius}
@@ -46,7 +60,7 @@ export function ProgressRing({
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           strokeDasharray={circumference}
-          strokeDashoffset={circumference * (1 - clamped)}
+          animatedProps={animatedProps}
           transform={`rotate(-90 ${center} ${center})`}
         />
       </Svg>

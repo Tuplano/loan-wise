@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { Link, useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { SymbolView } from 'expo-symbols';
 import { useMemo, useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
@@ -49,6 +50,7 @@ export default function LoansScreen() {
   }, [loanList, filter, query]);
 
   function handleDelete(id: number, name: string, notificationId: string | null) {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     Alert.alert('Delete loan', `Delete "${name}"? This also removes its payment history.`, [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -136,9 +138,9 @@ export default function LoansScreen() {
                 <ThemedText themeColor="textSecondary">Tap + to add your first one.</ThemedText>
               </View>
             }
-            renderItem={({ item }) => {
+            renderItem={({ item, index }) => {
               const principalPaid = item.payments.reduce(
-                (paid, payment) => paid + (payment.principalPortionCents ?? 0),
+                (paid, payment) => paid + (payment.isPaid ? payment.principalPortionCents : 0),
                 0
               );
               const remainingCents = Math.max(item.principalCents - principalPaid, 0);
@@ -154,6 +156,7 @@ export default function LoansScreen() {
                   monthlyPaymentCents={item.monthlyPaymentCents}
                   nextDueDate={item.nextDueDate}
                   status={item.status}
+                  index={index}
                   onPress={() => router.push(`/loan/${item.id}`)}
                   onDelete={() =>
                     handleDelete(item.id, item.name, item.reminders[0]?.notificationId ?? null)
@@ -179,7 +182,12 @@ function SegmentButton({
 }) {
   const theme = useTheme();
   return (
-    <Pressable style={styles.segmentButton} onPress={onPress}>
+    <Pressable
+      style={styles.segmentButton}
+      onPress={() => {
+        if (!selected) Haptics.selectionAsync();
+        onPress();
+      }}>
       <View
         style={[
           styles.segmentInner,

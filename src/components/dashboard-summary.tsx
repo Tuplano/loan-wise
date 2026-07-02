@@ -1,5 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { StyleSheet, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { ThemedText } from './themed-text';
 
@@ -24,34 +25,41 @@ export function DashboardSummary({
   const progress = totalPrincipalCents > 0 ? paidPrincipalCents / totalPrincipalCents : 0;
 
   return (
-    <LinearGradient
-      colors={['#14855F', '#0B5D42']}
-      start={{ x: 0.15, y: 0 }}
-      end={{ x: 0.85, y: 1 }}
-      style={styles.card}>
-      <View style={styles.blob} pointerEvents="none" />
+    <Animated.View entering={FadeInDown.duration(350)}>
+      <LinearGradient
+        colors={['#14855F', '#0B5D42']}
+        start={{ x: 0.15, y: 0 }}
+        end={{ x: 0.85, y: 1 }}
+        style={styles.card}>
+        <View style={styles.blob} pointerEvents="none" />
 
-      <ThemedText type="small" style={styles.labelText}>
-        Total outstanding balance
-      </ThemedText>
-      <ThemedText type="display" numeric style={styles.balanceText}>
-        {formatMoney(outstandingCents, currency)}
-      </ThemedText>
-      <ThemedText type="small" style={[styles.labelText, styles.subLabel]}>
-        {activeCount === 1 ? 'across 1 active loan' : `across ${activeCount} active loans`}
-      </ThemedText>
-
-      <ProgressBar progress={progress} height={8} trackColor="rgba(255,255,255,0.22)" fillColor="#8FE9BE" />
-
-      <View style={styles.footerRow}>
-        <ThemedText type="smallBold" numeric style={styles.footerPaid}>
-          {formatMoney(paidPrincipalCents, currency)} paid
+        <ThemedText type="small" style={styles.labelText}>
+          Total outstanding balance
         </ThemedText>
-        <ThemedText type="smallBold" numeric style={styles.footerTotal}>
-          of {formatMoney(totalPrincipalCents, currency)}
+        <ThemedText type="display" numeric style={styles.balanceText}>
+          {formatMoney(outstandingCents, currency)}
         </ThemedText>
-      </View>
-    </LinearGradient>
+        <ThemedText type="small" style={[styles.labelText, styles.subLabel]}>
+          {activeCount === 1 ? 'across 1 active loan' : `across ${activeCount} active loans`}
+        </ThemedText>
+
+        <ProgressBar
+          progress={progress}
+          height={8}
+          trackColor="rgba(255,255,255,0.22)"
+          fillColor="#8FE9BE"
+        />
+
+        <View style={styles.footerRow}>
+          <ThemedText type="smallBold" numeric style={styles.footerPaid}>
+            {formatMoney(paidPrincipalCents, currency)} paid
+          </ThemedText>
+          <ThemedText type="smallBold" numeric style={styles.footerTotal}>
+            of {formatMoney(totalPrincipalCents, currency)}
+          </ThemedText>
+        </View>
+      </LinearGradient>
+    </Animated.View>
   );
 }
 

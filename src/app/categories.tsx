@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { Stack } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
@@ -45,6 +46,7 @@ export default function CategoriesScreen() {
   }
 
   function handleDelete(id: number, name: string) {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     Alert.alert('Delete category', `Delete "${name}"? Loans using it will become uncategorized.`, [
       { text: 'Cancel', style: 'cancel' },
       {

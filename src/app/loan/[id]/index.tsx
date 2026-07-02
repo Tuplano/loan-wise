@@ -1,6 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { SymbolView } from 'expo-symbols';
 import { useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
@@ -9,17 +10,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { PillBadge } from '@/components/ui/pill-badge';
-import { PrimaryButton } from '@/components/ui/primary-button';
 import { ProgressRing } from '@/components/ui/progress-ring';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { db } from '@/db/client';
 import { loans, payments, reminders, type LoanStatus } from '@/db/schema';
 import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
-import { addMonths, formatDate, ordinalSuffix } from '@/lib/date';
+import { formatDate, ordinalSuffix } from '@/lib/date';
 import { formatMoney } from '@/lib/format';
 import { cancelReminder, scheduleLoanReminder } from '@/lib/notifications';
-import { getScheduleForLoan, scheduleAnchor } from '@/lib/schedule';
+import { computeNextDueDate, getScheduleForLoan, scheduleAnchor } from '@/lib/schedule';
 
 const statusLabel: Record<LoanStatus, string> = {
   active: 'Active',
@@ -33,14 +33,14 @@ export default function LoanDetailScreen() {
   const theme = useTheme();
   const currency = useCurrency();
   const router = useRouter();
-  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [processingId, setProcessingId] = useState<number | null>(null);
 
   const { data: loanResult } = useLiveQuery(
     db.query.loans.findFirst({
       where: eq(loans.id, loanId),
       with: {
         category: true,
-        payments: { orderBy: (fields, { asc }) => [asc(fields.paidAt)] },
+        payments: { orderBy: (fields, { asc }) => [asc(fields.installmentNumber)] },
         reminders: true,
       },
     })
@@ -57,15 +57,13 @@ export default function LoanDetailScreen() {
   }
 
   const loan = loanResult;
-  const paidCount = loan.payments.length;
-  const nextUnpaidIndex = paidCount < loan.termMonths ? paidCount : null;
-  const lastPaidIndex = paidCount > 0 ? paidCount - 1 : null;
+  const paidCount = loan.payments.filter((payment) => payment.isPaid).length;
   const reminder = loan.reminders[0];
 
-  const schedule = getScheduleForLoan(loan, loan.payments);
+  const schedule = getScheduleForLoan(loan.payments);
 
   const principalPaidCents = loan.payments.reduce(
-    (sum, payment) => sum + (payment.principalPortionCents ?? 0),
+    (sum, payment) => sum + (payment.isPaid ? payment.principalPortionCents : 0),
     0
   );
   const remainingCents = Math.max(loan.principalCents - principalPaidCents, 0);
@@ -131,25 +129,24 @@ export default function LoanDetailScreen() {
     });
   }
 
-  async function handleMarkPaid() {
-    if (nextUnpaidIndex === null || isProcessingPayment) return;
-    setIsProcessingPayment(true);
+  async function handleToggleInstallment(payment: (typeof loan.payments)[number]) {
+    if (processingId !== null) return;
+    setProcessingId(payment.id);
 
     try {
-      const principalPortionCents = Math.round(loan.principalCents / loan.termMonths);
-      const interestPortionCents = loan.monthlyPaymentCents - principalPortionCents;
       const now = new Date();
-      const newPaidCount = paidCount + 1;
-      const isFullyPaid = newPaidCount >= loan.termMonths;
-      const newDueDate = addMonths(scheduleAnchor(loan), isFullyPaid ? newPaidCount - 1 : newPaidCount);
+      const nextIsPaid = !payment.isPaid;
 
-      await db.insert(payments).values({
-        loanId: loan.id,
-        amountCents: loan.monthlyPaymentCents,
-        principalPortionCents,
-        interestPortionCents,
-        paidAt: now,
-      });
+      await db
+        .update(payments)
+        .set({ isPaid: nextIsPaid, paidAt: nextIsPaid ? now : null })
+        .where(eq(payments.id, payment.id));
+
+      const updatedRows = loan.payments.map((row) =>
+        row.id === payment.id ? { ...row, isPaid: nextIsPaid, paidAt: nextIsPaid ? now : null } : row
+      );
+      const isFullyPaid = updatedRows.every((row) => row.isPaid);
+      const newDueDate = computeNextDueDate(updatedRows);
 
       await db
         .update(loans)
@@ -161,36 +158,16 @@ export default function LoanDetailScreen() {
         .where(eq(loans.id, loan.id));
 
       await rescheduleReminder(isFullyPaid ? null : newDueDate);
+      Haptics.notificationAsync(
+        nextIsPaid ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning
+      );
     } finally {
-      setIsProcessingPayment(false);
-    }
-  }
-
-  async function handleUndoLastPayment() {
-    if (lastPaidIndex === null || isProcessingPayment) return;
-    setIsProcessingPayment(true);
-
-    try {
-      const lastPayment = loan.payments[lastPaidIndex];
-      const newDueDate = addMonths(scheduleAnchor(loan), lastPaidIndex);
-
-      await db.delete(payments).where(eq(payments.id, lastPayment.id));
-      await db
-        .update(loans)
-        .set({
-          nextDueDate: newDueDate,
-          status: 'active',
-          updatedAt: new Date(),
-        })
-        .where(eq(loans.id, loan.id));
-
-      await rescheduleReminder(newDueDate);
-    } finally {
-      setIsProcessingPayment(false);
+      setProcessingId(null);
     }
   }
 
   function handleDelete() {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     Alert.alert('Delete loan', `Delete "${loan.name}"? This also removes its payment history.`, [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -328,75 +305,69 @@ export default function LoanDetailScreen() {
                 <ThemedText type="smallBold" style={styles.scheduleLabel}>
                   Payment schedule ({paidCount}/{loan.termMonths} paid)
                 </ThemedText>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Tap any month to mark it paid or undo it — in any order.
+                </ThemedText>
               </View>
             }
             renderItem={({ item }) => {
-              const isLastPaid = item.index === lastPaidIndex;
-              // Marking paid happens only through the "Log payment" button below —
-              // the row itself only supports tap-to-undo on the most recent payment.
-              const interactive = isLastPaid;
-
-              const row = (
-                <View style={[styles.scheduleRow, { backgroundColor: theme.card, borderColor: theme.border }]}>
-                  <View
-                    style={[
-                      styles.scheduleIcon,
-                      { backgroundColor: item.paid ? theme.successTint : theme.backgroundElement },
-                    ]}>
-                    {item.paid ? (
-                      <SymbolView
-                        tintColor={theme.primary}
-                        name={{ ios: 'checkmark', android: 'check', web: 'check' }}
-                        size={15}
-                      />
-                    ) : (
-                      <ThemedText type="smallBold" themeColor="textSecondary">
-                        {item.index + 1}
-                      </ThemedText>
-                    )}
-                  </View>
-                  <View style={styles.scheduleLeading}>
-                    <ThemedText type="smallBold">Month {item.index + 1}</ThemedText>
-                    <ThemedText type="small" themeColor="textSecondary">
-                      {formatDate(item.dueDate)}
-                    </ThemedText>
-                  </View>
-                  <View style={styles.scheduleTrailing}>
-                    <ThemedText type="smallBold" numeric themeColor={item.paid ? 'text' : 'textSecondary'}>
-                      {formatMoney(item.amountCents, currency)}
-                    </ThemedText>
-                    {!item.paid && (
-                      <ThemedText type="small" themeColor="textSecondary">
-                        Upcoming
-                      </ThemedText>
-                    )}
-                  </View>
-                </View>
-              );
-
-              if (!interactive) return row;
+              const isProcessing = processingId === item.payment.id;
+              const subtitle = item.paid
+                ? `Paid ${formatDate(item.payment.paidAt!)}`
+                : `Due ${formatDate(item.dueDate)}`;
+              const trailingNote = item.paid
+                ? item.onTime
+                  ? 'On time'
+                  : `${item.daysLate}d late`
+                : item.dueDate.getTime() < Date.now()
+                  ? 'Overdue'
+                  : 'Upcoming';
 
               return (
                 <Pressable
-                  onPress={handleUndoLastPayment}
+                  onPress={() => handleToggleInstallment(item.payment)}
+                  disabled={isProcessing}
                   style={({ pressed }) => pressed && styles.pressed}>
-                  {row}
+                  <View style={[styles.scheduleRow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                    <View
+                      style={[
+                        styles.scheduleIcon,
+                        { backgroundColor: item.paid ? theme.successTint : theme.backgroundElement },
+                      ]}>
+                      {item.paid ? (
+                        <SymbolView
+                          tintColor={theme.primary}
+                          name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                          size={15}
+                        />
+                      ) : (
+                        <ThemedText type="smallBold" themeColor="textSecondary">
+                          {item.index + 1}
+                        </ThemedText>
+                      )}
+                    </View>
+                    <View style={styles.scheduleLeading}>
+                      <ThemedText type="smallBold">Month {item.index + 1}</ThemedText>
+                      <ThemedText type="small" themeColor="textSecondary">
+                        {subtitle}
+                      </ThemedText>
+                    </View>
+                    <View style={styles.scheduleTrailing}>
+                      <ThemedText type="smallBold" numeric themeColor={item.paid ? 'text' : 'textSecondary'}>
+                        {formatMoney(item.amountCents, currency)}
+                      </ThemedText>
+                      <ThemedText
+                        type="small"
+                        themeColor={!item.paid && trailingNote === 'Overdue' ? 'danger' : 'textSecondary'}>
+                        {trailingNote}
+                      </ThemedText>
+                    </View>
+                  </View>
                 </Pressable>
               );
             }}
             ItemSeparatorComponent={() => <View style={{ height: Spacing.two }} />}
           />
-
-          {nextUnpaidIndex !== null && (
-            <View style={[styles.footer, { backgroundColor: theme.background, borderTopColor: theme.border }]}>
-              <PrimaryButton
-                label="Log payment"
-                onPress={handleMarkPaid}
-                disabled={isProcessingPayment}
-                size="large"
-              />
-            </View>
-          )}
         </View>
       </SafeAreaView>
     </ThemedView>
@@ -545,11 +516,5 @@ const styles = StyleSheet.create({
   scheduleTrailing: {
     alignItems: 'flex-end',
     gap: 1,
-  },
-  footer: {
-    paddingHorizontal: Spacing.three,
-    paddingTop: Spacing.two,
-    paddingBottom: Spacing.two,
-    borderTopWidth: StyleSheet.hairlineWidth,
   },
 });

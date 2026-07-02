@@ -22,9 +22,7 @@ export function DateField({ label, value, onChange }: DateFieldProps) {
       DateTimePickerAndroid.open({
         value,
         mode: 'date',
-        onChange: (_event, selected) => {
-          if (selected) onChange(selected);
-        },
+        onValueChange: (_event, selected) => onChange(selected),
       });
       return;
     }
@@ -50,9 +48,7 @@ export function DateField({ label, value, onChange }: DateFieldProps) {
           value={value}
           mode="date"
           display="inline"
-          onChange={(_event, selected) => {
-            if (selected) onChange(selected);
-          }}
+          onValueChange={(_event, selected) => onChange(selected)}
         />
       )}
     </View>

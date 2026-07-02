@@ -6,12 +6,15 @@ export function isSameMonth(a: Date, b: Date) {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
 }
 
-export function sumPaymentsInMonth<T extends { paidAt: Date; amountCents: number }>(
+export function sumPaymentsInMonth<T extends { isPaid: boolean; paidAt: Date | null; amountCents: number }>(
   payments: T[],
   month: Date = new Date()
 ) {
   return payments.reduce(
-    (sum, payment) => (isSameMonth(payment.paidAt, month) ? sum + payment.amountCents : sum),
+    (sum, payment) =>
+      payment.isPaid && payment.paidAt && isSameMonth(payment.paidAt, month)
+        ? sum + payment.amountCents
+        : sum,
     0
   );
 }

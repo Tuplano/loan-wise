@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { eq } from 'drizzle-orm';
 import { useRouter } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useState } from 'react';
 import Constants from 'expo-constants';
@@ -39,6 +40,7 @@ export default function SettingsScreen() {
 
   async function handleToggleReminders(value: boolean) {
     if (!settings) return;
+    Haptics.selectionAsync();
     if (value) {
       if (!isNotificationsAvailable()) {
         Alert.alert(
@@ -61,6 +63,7 @@ export default function SettingsScreen() {
 
   async function handleDaysBeforeChange(delta: number) {
     if (!settings) return;
+    Haptics.selectionAsync();
     const next = Math.min(
       MAX_DAYS_BEFORE,
       Math.max(MIN_DAYS_BEFORE, settings.reminderDaysBefore + delta)
@@ -93,12 +96,14 @@ export default function SettingsScreen() {
 
   async function handleSelectCurrency(currency: CurrencyCode) {
     if (!settings) return;
+    Haptics.selectionAsync();
     await db.update(appSettings).set({ currency }).where(eq(appSettings.id, settings.id));
     setExpandedPicker(null);
   }
 
   async function handleSelectAppearance(mode: AppearanceMode) {
     if (!settings) return;
+    Haptics.selectionAsync();
     await db.update(appSettings).set({ appearance: mode }).where(eq(appSettings.id, settings.id));
     setExpandedPicker(null);
   }

@@ -1,5 +1,5 @@
 import { relations } from 'drizzle-orm';
-import { integer, real, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { integer, real, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 import type { CurrencyCode } from '@/lib/currency';
 
@@ -52,17 +52,25 @@ export const payments = sqliteTable('payments', {
     .notNull()
     .references(() => loans.id, { onDelete: 'cascade' }),
 
-  amountCents: integer('amount_cents').notNull(),
-  principalPortionCents: integer('principal_portion_cents'),
-  interestPortionCents: integer('interest_portion_cents'),
+  // 1-based position in the loan's schedule (1..termMonths). Every installment row
+  // is created up front so any month can be tapped and marked paid, in any order.
+  installmentNumber: integer('installment_number').notNull(),
+  dueDate: integer('due_date', { mode: 'timestamp' }).notNull(),
 
-  paidAt: integer('paid_at', { mode: 'timestamp' }).notNull(),
+  amountCents: integer('amount_cents').notNull(),
+  principalPortionCents: integer('principal_portion_cents').notNull(),
+  interestPortionCents: integer('interest_portion_cents').notNull(),
+
+  isPaid: integer('is_paid', { mode: 'boolean' }).notNull().default(false),
+  paidAt: integer('paid_at', { mode: 'timestamp' }),
   note: text('note'),
 
   createdAt: integer('created_at', { mode: 'timestamp' })
     .notNull()
     .$defaultFn(() => new Date()),
-});
+}, (table) => [
+  uniqueIndex('payments_loan_installment_idx').on(table.loanId, table.installmentNumber),
+]);
 
 export const reminders = sqliteTable('reminders', {
   id: integer('id').primaryKey({ autoIncrement: true }),

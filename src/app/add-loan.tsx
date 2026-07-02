@@ -2,9 +2,10 @@ import { useRouter } from 'expo-router';
 
 import { LoanForm } from '@/components/loan-form';
 import { db } from '@/db/client';
-import { loans, reminders } from '@/db/schema';
+import { loans, payments, reminders } from '@/db/schema';
 import { formatMoney } from '@/lib/format';
 import { scheduleLoanReminder } from '@/lib/notifications';
+import { buildInstallmentSchedule } from '@/lib/schedule';
 
 export default function AddLoanScreen() {
   const router = useRouter();
@@ -17,6 +18,13 @@ export default function AddLoanScreen() {
           .insert(loans)
           .values({ ...values, nextDueDate: values.firstPaymentDate })
           .returning();
+
+        await db.insert(payments).values(
+          buildInstallmentSchedule(createdLoan).map((installment) => ({
+            loanId: createdLoan.id,
+            ...installment,
+          }))
+        );
 
         const settings = await db.query.appSettings.findFirst();
         if (settings?.remindersEnabled) {

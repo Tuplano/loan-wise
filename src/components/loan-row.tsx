@@ -1,5 +1,6 @@
 import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 
 import { ThemedText } from './themed-text';
 
@@ -22,6 +23,7 @@ type LoanRowProps = {
   monthlyPaymentCents: number;
   nextDueDate: Date;
   status: LoanStatus;
+  index?: number;
   onPress?: () => void;
   onDelete?: () => void;
 };
@@ -42,6 +44,7 @@ export function LoanRow({
   monthlyPaymentCents,
   nextDueDate,
   status,
+  index = 0,
   onPress,
   onDelete,
 }: LoanRowProps) {
@@ -53,71 +56,73 @@ export function LoanRow({
   const isDueSoon = status === 'active' && !isOverdue && daysUntilDue <= 5;
 
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => pressed && styles.pressed}>
-      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
-        <View style={styles.topRow}>
-          <View style={styles.titleGroup}>
-            <ThemedText type="smallBold" style={styles.name} numberOfLines={1}>
-              {name}
+    <Animated.View entering={FadeInDown.duration(280).delay(Math.min(index * 40, 200))}>
+      <Pressable onPress={onPress} style={({ pressed }) => pressed && styles.pressed}>
+        <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+          <View style={styles.topRow}>
+            <View style={styles.titleGroup}>
+              <ThemedText type="smallBold" style={styles.name} numberOfLines={1}>
+                {name}
+              </ThemedText>
+              <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                {lender || 'No lender set'}
+              </ThemedText>
+            </View>
+            {isOverdue && <PillBadge label="Overdue" tone="danger" />}
+            {categoryName ? (
+              <PillBadge label={categoryName} color={categoryColor ?? undefined} />
+            ) : (
+              <PillBadge label={statusLabel[status]} tone="neutral" />
+            )}
+            {onDelete && (
+              <Pressable hitSlop={8} onPress={onDelete} style={styles.deleteButton}>
+                <SymbolView
+                  tintColor={theme.textSecondary}
+                  name={{ ios: 'trash', android: 'delete', web: 'delete' }}
+                  size={16}
+                />
+              </Pressable>
+            )}
+          </View>
+
+          <View style={styles.amountRow}>
+            <ThemedText type="subtitle" numeric>
+              {formatMoney(remainingCents, currency)}
             </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-              {lender || 'No lender set'}
+            <ThemedText type="small" themeColor="textSecondary" numeric>
+              of {formatMoney(principalCents, currency)}
             </ThemedText>
           </View>
-          {isOverdue && <PillBadge label="Overdue" tone="danger" />}
-          {categoryName ? (
-            <PillBadge label={categoryName} color={categoryColor ?? undefined} />
-          ) : (
-            <PillBadge label={statusLabel[status]} tone="neutral" />
-          )}
-          {onDelete && (
-            <Pressable hitSlop={8} onPress={onDelete} style={styles.deleteButton}>
-              <SymbolView
-                tintColor={theme.textSecondary}
-                name={{ ios: 'trash', android: 'delete', web: 'delete' }}
-                size={16}
-              />
-            </Pressable>
-          )}
-        </View>
 
-        <View style={styles.amountRow}>
-          <ThemedText type="subtitle" numeric>
-            {formatMoney(remainingCents, currency)}
-          </ThemedText>
-          <ThemedText type="small" themeColor="textSecondary" numeric>
-            of {formatMoney(principalCents, currency)}
-          </ThemedText>
-        </View>
+          <ProgressBar progress={progress} />
 
-        <ProgressBar progress={progress} />
-
-        <View style={[styles.footer, { borderTopColor: theme.divider }]}>
-          <View>
-            <ThemedText type="small" themeColor="textSecondary">
-              Monthly
-            </ThemedText>
-            <ThemedText type="smallBold" numeric>
-              {formatMoney(monthlyPaymentCents, currency)}
-            </ThemedText>
-          </View>
-          <View style={styles.footerRight}>
-            <ThemedText type="small" themeColor="textSecondary">
-              {status === 'paid_off' ? 'Status' : isOverdue ? 'Overdue' : 'Next due'}
-            </ThemedText>
-            <ThemedText
-              type="smallBold"
-              style={isOverdue || isDueSoon ? { color: theme.danger } : undefined}>
-              {status === 'paid_off'
-                ? 'Paid off'
-                : isOverdue
-                  ? `${formatDate(nextDueDate)} · ${Math.abs(Math.floor(daysUntilDue))}d late`
-                  : formatDate(nextDueDate)}
-            </ThemedText>
+          <View style={[styles.footer, { borderTopColor: theme.divider }]}>
+            <View>
+              <ThemedText type="small" themeColor="textSecondary">
+                Monthly
+              </ThemedText>
+              <ThemedText type="smallBold" numeric>
+                {formatMoney(monthlyPaymentCents, currency)}
+              </ThemedText>
+            </View>
+            <View style={styles.footerRight}>
+              <ThemedText type="small" themeColor="textSecondary">
+                {status === 'paid_off' ? 'Status' : isOverdue ? 'Overdue' : 'Next due'}
+              </ThemedText>
+              <ThemedText
+                type="smallBold"
+                style={isOverdue || isDueSoon ? { color: theme.danger } : undefined}>
+                {status === 'paid_off'
+                  ? 'Paid off'
+                  : isOverdue
+                    ? `${formatDate(nextDueDate)} · ${Math.abs(Math.floor(daysUntilDue))}d late`
+                    : formatDate(nextDueDate)}
+              </ThemedText>
+            </View>
           </View>
         </View>
-      </View>
-    </Pressable>
+      </Pressable>
+    </Animated.View>
   );
 }
 
