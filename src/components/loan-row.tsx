@@ -2,11 +2,13 @@ import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from './themed-text';
-import { ThemedView } from './themed-view';
 
-import { Spacing } from '@/constants/theme';
+import { PillBadge } from '@/components/ui/pill-badge';
+import { ProgressBar } from '@/components/ui/progress-bar';
+import { Radii, Spacing } from '@/constants/theme';
 import type { LoanStatus } from '@/db/schema';
 import { useTheme } from '@/hooks/use-theme';
+import { formatDate } from '@/lib/date';
 import { formatMoney } from '@/lib/format';
 
 type LoanRowProps = {
@@ -14,7 +16,10 @@ type LoanRowProps = {
   lender?: string | null;
   categoryName?: string | null;
   categoryColor?: string | null;
+  principalCents: number;
+  remainingCents: number;
   monthlyPaymentCents: number;
+  nextDueDate: Date;
   status: LoanStatus;
   onPress?: () => void;
   onDelete?: () => void;
@@ -31,89 +36,122 @@ export function LoanRow({
   lender,
   categoryName,
   categoryColor,
+  principalCents,
+  remainingCents,
   monthlyPaymentCents,
+  nextDueDate,
   status,
   onPress,
   onDelete,
 }: LoanRowProps) {
   const theme = useTheme();
-  const subtitle = [categoryName, lender].filter(Boolean).join(' · ') || 'Uncategorized';
+  const progress = principalCents > 0 ? 1 - remainingCents / principalCents : 0;
+  const isDueSoon =
+    status === 'active' &&
+    (nextDueDate.getTime() - Date.now()) / 86_400_000 <= 5;
 
   return (
-    <ThemedView style={[styles.row, { borderBottomColor: theme.backgroundSelected }]}>
-      <Pressable
-        onPress={onPress}
-        style={({ pressed }) => [styles.rowContent, pressed && styles.pressed]}>
-        <View style={styles.leading}>
-          <ThemedText numberOfLines={1}>{name}</ThemedText>
-          <View style={styles.metaRow}>
-            {categoryColor && <View style={[styles.dot, { backgroundColor: categoryColor }]} />}
+    <Pressable onPress={onPress} style={({ pressed }) => pressed && styles.pressed}>
+      <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
+        <View style={styles.topRow}>
+          <View style={styles.titleGroup}>
+            <ThemedText type="smallBold" style={styles.name} numberOfLines={1}>
+              {name}
+            </ThemedText>
             <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-              {subtitle}
+              {lender || 'No lender set'}
+            </ThemedText>
+          </View>
+          {categoryName ? (
+            <PillBadge label={categoryName} color={categoryColor ?? undefined} />
+          ) : (
+            <PillBadge label={statusLabel[status]} tone="neutral" />
+          )}
+          {onDelete && (
+            <Pressable hitSlop={8} onPress={onDelete} style={styles.deleteButton}>
+              <SymbolView
+                tintColor={theme.textSecondary}
+                name={{ ios: 'trash', android: 'delete', web: 'delete' }}
+                size={16}
+              />
+            </Pressable>
+          )}
+        </View>
+
+        <View style={styles.amountRow}>
+          <ThemedText type="subtitle" numeric>
+            {formatMoney(remainingCents)}
+          </ThemedText>
+          <ThemedText type="small" themeColor="textSecondary" numeric>
+            of {formatMoney(principalCents)}
+          </ThemedText>
+        </View>
+
+        <ProgressBar progress={progress} />
+
+        <View style={[styles.footer, { borderTopColor: theme.divider }]}>
+          <View>
+            <ThemedText type="small" themeColor="textSecondary">
+              Monthly
+            </ThemedText>
+            <ThemedText type="smallBold" numeric>
+              {formatMoney(monthlyPaymentCents)}
+            </ThemedText>
+          </View>
+          <View style={styles.footerRight}>
+            <ThemedText type="small" themeColor="textSecondary">
+              {status === 'paid_off' ? 'Status' : 'Next due'}
+            </ThemedText>
+            <ThemedText
+              type="smallBold"
+              style={isDueSoon ? { color: theme.danger } : undefined}>
+              {status === 'paid_off' ? 'Paid off' : formatDate(nextDueDate)}
             </ThemedText>
           </View>
         </View>
-        <View style={styles.trailing}>
-          <ThemedText>{formatMoney(monthlyPaymentCents)}/mo</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
-            {statusLabel[status]}
-          </ThemedText>
-        </View>
-      </Pressable>
-      {onDelete && (
-        <Pressable
-          hitSlop={8}
-          onPress={onDelete}
-          style={({ pressed }) => [styles.deleteButton, pressed && styles.pressed]}>
-          <SymbolView
-            tintColor={theme.textSecondary}
-            name={{ ios: 'trash', android: 'delete', web: 'delete' }}
-            size={18}
-          />
-        </Pressable>
-      )}
-    </ThemedView>
+      </View>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   pressed: {
-    opacity: 0.6,
+    opacity: 0.75,
   },
-  row: {
+  card: {
+    borderWidth: 1,
+    borderRadius: Radii.card,
+    padding: Spacing.three,
+    gap: Spacing.two + 2,
+  },
+  topRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    alignItems: 'flex-start',
+    gap: Spacing.two,
   },
-  rowContent: {
+  titleGroup: {
     flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: Spacing.three,
-    paddingVertical: Spacing.three,
-    paddingLeft: Spacing.three,
+    minWidth: 0,
+    gap: 1,
+  },
+  name: {
+    fontSize: 16,
   },
   deleteButton: {
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.three,
+    padding: Spacing.half,
   },
-  leading: {
-    gap: Spacing.half,
-    flexShrink: 1,
-  },
-  trailing: {
-    alignItems: 'flex-end',
-    gap: Spacing.half,
-  },
-  metaRow: {
+  amountRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.one,
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
   },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  footer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: Spacing.two + 2,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  footerRight: {
+    alignItems: 'flex-end',
   },
 });

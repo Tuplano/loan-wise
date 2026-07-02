@@ -1,3 +1,4 @@
+import { LinearGradient } from 'expo-linear-gradient';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { Stack } from 'expo-router';
 import { useState } from 'react';
@@ -14,7 +15,8 @@ import {
 import { ThemedText } from './themed-text';
 import { ThemedView } from './themed-view';
 
-import { Spacing } from '@/constants/theme';
+import { PrimaryButton } from '@/components/ui/primary-button';
+import { Radii, Spacing } from '@/constants/theme';
 import { db } from '@/db/client';
 import { useTheme } from '@/hooks/use-theme';
 import { formatMoney } from '@/lib/format';
@@ -52,7 +54,7 @@ type LoanFormProps = {
   onSubmit: (values: LoanFormValues) => Promise<void>;
 };
 
-export function LoanForm({ title, submitLabel = 'Save', initialValues, onSubmit }: LoanFormProps) {
+export function LoanForm({ title, submitLabel = 'Save loan', initialValues, onSubmit }: LoanFormProps) {
   const theme = useTheme();
   const { data: categories } = useLiveQuery(db.query.categories.findMany());
 
@@ -69,11 +71,17 @@ export function LoanForm({ title, submitLabel = 'Save', initialValues, onSubmit 
   const termMonthsValue = Number.parseInt(termMonths, 10);
   const monthlyRate = (Number.parseFloat(interestRate) || 0) / 100;
 
+  const hasValidTerm = Number.isFinite(termMonthsValue) && termMonthsValue > 0;
+  const basePaymentCents =
+    principalCents !== null && hasValidTerm ? Math.round(principalCents / termMonthsValue) : null;
+  const interestPaymentCents =
+    principalCents !== null ? Math.round(principalCents * monthlyRate) : null;
+
   // Flat monthly interest: principal / term, plus interest charged on the full
   // principal each month (not a reducing-balance amortization).
   const monthlyPaymentCents =
-    principalCents !== null && Number.isFinite(termMonthsValue) && termMonthsValue > 0
-      ? Math.round(principalCents / termMonthsValue + principalCents * monthlyRate)
+    basePaymentCents !== null && interestPaymentCents !== null
+      ? basePaymentCents + interestPaymentCents
       : null;
 
   const isValid =
@@ -82,8 +90,7 @@ export function LoanForm({ title, submitLabel = 'Save', initialValues, onSubmit 
     principalCents > 0 &&
     monthlyPaymentCents !== null &&
     monthlyPaymentCents > 0 &&
-    Number.isFinite(termMonthsValue) &&
-    termMonthsValue > 0;
+    hasValidTerm;
 
   async function handleSubmit() {
     if (!isValid || submitting) return;
@@ -105,20 +112,7 @@ export function LoanForm({ title, submitLabel = 'Save', initialValues, onSubmit 
 
   return (
     <ThemedView style={styles.container}>
-      <Stack.Screen
-        options={{
-          title,
-          headerRight: () => (
-            <Pressable onPress={handleSubmit} disabled={!isValid || submitting}>
-              <ThemedText
-                type="linkPrimary"
-                style={!isValid || submitting ? styles.disabledSave : undefined}>
-                {submitLabel}
-              </ThemedText>
-            </Pressable>
-          ),
-        }}
-      />
+      <Stack.Screen options={{ title }} />
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -126,13 +120,47 @@ export function LoanForm({ title, submitLabel = 'Save', initialValues, onSubmit 
           style={styles.flex}
           contentContainerStyle={styles.formContent}
           keyboardShouldPersistTaps="handled">
+          <LinearGradient
+            colors={['#14855F', '#0B5D42']}
+            start={{ x: 0.15, y: 0 }}
+            end={{ x: 0.85, y: 1 }}
+            style={styles.heroCard}>
+            <ThemedText type="small" style={styles.heroLabel}>
+              Computed monthly payment
+            </ThemedText>
+            <ThemedText type="display" numeric style={styles.heroValue}>
+              {monthlyPaymentCents !== null ? formatMoney(monthlyPaymentCents) : '—'}
+            </ThemedText>
+            <View style={styles.heroBreakdownRow}>
+              <View style={styles.heroBreakdownItem}>
+                <ThemedText type="small" style={styles.heroLabel}>
+                  Base ÷ term
+                </ThemedText>
+                <ThemedText type="smallBold" numeric style={styles.heroBreakdownValue}>
+                  {basePaymentCents !== null ? formatMoney(basePaymentCents) : '—'}
+                </ThemedText>
+              </View>
+              <View style={styles.heroBreakdownItem}>
+                <ThemedText type="small" style={styles.heroLabel}>
+                  Interest {interestRate || 0}%
+                </ThemedText>
+                <ThemedText type="smallBold" numeric style={styles.heroBreakdownValue}>
+                  {interestPaymentCents !== null ? `+ ${formatMoney(interestPaymentCents)}` : '—'}
+                </ThemedText>
+              </View>
+            </View>
+          </LinearGradient>
+
           <Field label="Loan name">
             <TextInput
               value={name}
               onChangeText={setName}
               placeholder="Car loan"
               placeholderTextColor={theme.textSecondary}
-              style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
+              style={[
+                styles.input,
+                { color: theme.text, borderColor: theme.border, backgroundColor: theme.card },
+              ]}
             />
           </Field>
 
@@ -142,7 +170,10 @@ export function LoanForm({ title, submitLabel = 'Save', initialValues, onSubmit 
               onChangeText={setLender}
               placeholder="Bank of America"
               placeholderTextColor={theme.textSecondary}
-              style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
+              style={[
+                styles.input,
+                { color: theme.text, borderColor: theme.border, backgroundColor: theme.card },
+              ]}
             />
           </Field>
 
@@ -154,14 +185,22 @@ export function LoanForm({ title, submitLabel = 'Save', initialValues, onSubmit 
                   <Pressable
                     key={category.id}
                     onPress={() => setCategoryId(selected ? null : category.id)}>
-                    <ThemedView
-                      type={selected ? 'backgroundSelected' : 'backgroundElement'}
-                      style={styles.chip}>
-                      {category.color && (
+                    <View
+                      style={[
+                        styles.chip,
+                        selected
+                          ? { backgroundColor: theme.primary }
+                          : { backgroundColor: theme.card, borderWidth: 1, borderColor: theme.border },
+                      ]}>
+                      {category.color && !selected && (
                         <View style={[styles.chipDot, { backgroundColor: category.color }]} />
                       )}
-                      <ThemedText type="small">{category.name}</ThemedText>
-                    </ThemedView>
+                      <ThemedText
+                        type="smallBold"
+                        style={selected ? styles.chipTextSelected : undefined}>
+                        {category.name}
+                      </ThemedText>
+                    </View>
                   </Pressable>
                 );
               })}
@@ -178,7 +217,7 @@ export function LoanForm({ title, submitLabel = 'Save', initialValues, onSubmit 
                 placeholderTextColor={theme.textSecondary}
                 style={[
                   styles.input,
-                  { color: theme.text, borderColor: theme.backgroundSelected },
+                  { color: theme.text, borderColor: theme.border, backgroundColor: theme.card },
                 ]}
               />
             </Field>
@@ -191,7 +230,7 @@ export function LoanForm({ title, submitLabel = 'Save', initialValues, onSubmit 
                 placeholderTextColor={theme.textSecondary}
                 style={[
                   styles.input,
-                  { color: theme.text, borderColor: theme.backgroundSelected },
+                  { color: theme.text, borderColor: theme.border, backgroundColor: theme.card },
                 ]}
               />
             </Field>
@@ -204,18 +243,12 @@ export function LoanForm({ title, submitLabel = 'Save', initialValues, onSubmit 
               placeholder="1.5"
               keyboardType="decimal-pad"
               placeholderTextColor={theme.textSecondary}
-              style={[styles.input, { color: theme.text, borderColor: theme.backgroundSelected }]}
+              style={[
+                styles.input,
+                { color: theme.text, borderColor: theme.border, backgroundColor: theme.card },
+              ]}
             />
           </Field>
-
-          <View style={styles.summaryRow}>
-            <ThemedText type="small" themeColor="textSecondary">
-              Monthly payment
-            </ThemedText>
-            <ThemedText type="subtitle">
-              {monthlyPaymentCents !== null ? formatMoney(monthlyPaymentCents) : '—'}
-            </ThemedText>
-          </View>
 
           <Field label="Notes (optional)">
             <TextInput
@@ -228,11 +261,20 @@ export function LoanForm({ title, submitLabel = 'Save', initialValues, onSubmit 
               style={[
                 styles.input,
                 styles.notesInput,
-                { color: theme.text, borderColor: theme.backgroundSelected },
+                { color: theme.text, borderColor: theme.border, backgroundColor: theme.card },
               ]}
             />
           </Field>
         </ScrollView>
+
+        <View style={[styles.footer, { backgroundColor: theme.background, borderTopColor: theme.border }]}>
+          <PrimaryButton
+            label={submitLabel}
+            onPress={handleSubmit}
+            disabled={!isValid || submitting}
+            size="large"
+          />
+        </View>
       </KeyboardAvoidingView>
     </ThemedView>
   );
@@ -249,7 +291,7 @@ function Field({
 }) {
   return (
     <View style={[styles.field, style]}>
-      <ThemedText type="small" themeColor="textSecondary">
+      <ThemedText type="smallBold" themeColor="textSecondary">
         {label}
       </ThemedText>
       {children}
@@ -265,16 +307,43 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   formContent: {
-    padding: Spacing.four,
-    gap: Spacing.four,
+    padding: Spacing.three,
+    gap: Spacing.three,
+  },
+  heroCard: {
+    borderRadius: Radii.card,
+    padding: Spacing.three + 2,
+    marginBottom: Spacing.one,
+    shadowColor: '#0B5D42',
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 5,
+  },
+  heroLabel: {
+    color: 'rgba(255,255,255,0.75)',
+  },
+  heroValue: {
+    color: '#FFFFFF',
+    marginTop: 2,
+    marginBottom: Spacing.two,
+  },
+  heroBreakdownRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  heroBreakdownItem: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderRadius: Radii.row - 6,
+    padding: Spacing.two + 1,
+  },
+  heroBreakdownValue: {
+    color: '#FFFFFF',
+    marginTop: 2,
   },
   field: {
-    gap: Spacing.one,
-  },
-  summaryRow: {
-    alignItems: 'center',
-    gap: Spacing.half,
-    paddingVertical: Spacing.two,
+    gap: Spacing.one + 1,
   },
   row: {
     flexDirection: 'row',
@@ -282,13 +351,16 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderRadius: Spacing.two,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    fontSize: 16,
+    borderRadius: Radii.input,
+    paddingHorizontal: Spacing.three - 1,
+    height: 50,
+    fontSize: 15,
+    fontWeight: '700',
   },
   notesInput: {
     minHeight: 80,
+    height: undefined,
+    paddingVertical: Spacing.two + 1,
     textAlignVertical: 'top',
   },
   chipRow: {
@@ -298,17 +370,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.one,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.two,
+    paddingHorizontal: Spacing.three - 1,
+    paddingVertical: Spacing.two + 1,
+    borderRadius: Radii.row - 6,
     marginRight: Spacing.two,
+  },
+  chipTextSelected: {
+    color: '#FFFFFF',
   },
   chipDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
   },
-  disabledSave: {
-    opacity: 0.4,
+  footer: {
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.three,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
 });

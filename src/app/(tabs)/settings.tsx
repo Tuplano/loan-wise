@@ -1,13 +1,13 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { eq } from 'drizzle-orm';
-import { SymbolView } from 'expo-symbols';
+import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { BottomTabInset, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { db } from '@/db/client';
 import { appSettings, categories } from '@/db/schema';
 import { categoryColors } from '@/db/seed';
@@ -98,19 +98,17 @@ export default function SettingsScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled">
           <View style={styles.header}>
-            <ThemedText type="subtitle">Settings</ThemedText>
+            <ThemedText type="title">Settings</ThemedText>
           </View>
 
-          <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          <ThemedText type="sectionLabel" themeColor="textMuted" style={styles.sectionLabel}>
             Categories
           </ThemedText>
-          <ThemedView type="backgroundElement" style={styles.group}>
+          <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
             {categoryList.map((category) => {
               const isEditing = editingId === category.id;
               return (
-                <View
-                  key={category.id}
-                  style={[styles.row, { borderBottomColor: theme.backgroundSelected }]}>
+                <View key={category.id} style={[styles.row, { borderBottomColor: theme.divider }]}>
                   <View style={[styles.dot, { backgroundColor: category.color ?? undefined }]} />
                   {isEditing ? (
                     <TextInput
@@ -170,29 +168,39 @@ export default function SettingsScreen() {
                 />
                 <Pressable onPress={handleAdd} hitSlop={8}>
                   <SymbolView
-                    tintColor={theme.text}
+                    tintColor={theme.primary}
                     name={{ ios: 'plus.circle.fill', android: 'add_circle', web: 'add_circle' }}
                     size={26}
                   />
                 </Pressable>
               </View>
             </View>
-          </ThemedView>
+          </View>
 
-          <ThemedText type="small" themeColor="textSecondary" style={styles.sectionLabel}>
+          <ThemedText type="sectionLabel" themeColor="textMuted" style={styles.sectionLabel}>
             Notifications
           </ThemedText>
-          <ThemedView type="backgroundElement" style={styles.group}>
-            <View style={[styles.row, { borderBottomColor: theme.backgroundSelected }]}>
+          <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={[styles.row, { borderBottomColor: theme.divider }]}>
+              <IconBadge
+                icon={{ ios: 'bell.fill', android: 'notifications', web: 'notifications' }}
+                tint={theme.primary}
+                bg={theme.primaryTint}
+              />
               <ThemedText style={styles.rowLabel}>Payment reminders</ThemedText>
               <Switch
                 value={settings?.remindersEnabled ?? true}
                 onValueChange={handleToggleReminders}
-                trackColor={{ false: theme.backgroundSelected, true: '#208AEF' }}
+                trackColor={{ false: theme.backgroundSelected, true: theme.primary }}
                 thumbColor="#ffffff"
               />
             </View>
             <View style={styles.row}>
+              <IconBadge
+                icon={{ ios: 'calendar', android: 'event', web: 'event' }}
+                tint={theme.primary}
+                bg={theme.primaryTint}
+              />
               <ThemedText style={styles.rowLabel}>Remind me before due date</ThemedText>
               <View style={styles.stepper}>
                 <Pressable
@@ -205,7 +213,7 @@ export default function SettingsScreen() {
                     size={22}
                   />
                 </Pressable>
-                <ThemedText style={styles.stepperValue}>
+                <ThemedText type="smallBold" style={styles.stepperValue}>
                   {settings?.reminderDaysBefore ?? 3}d
                 </ThemedText>
                 <Pressable
@@ -220,10 +228,26 @@ export default function SettingsScreen() {
                 </Pressable>
               </View>
             </View>
-          </ThemedView>
+          </View>
         </ScrollView>
       </SafeAreaView>
     </ThemedView>
+  );
+}
+
+function IconBadge({
+  icon,
+  tint,
+  bg,
+}: {
+  icon: SymbolViewProps['name'];
+  tint: string;
+  bg: string;
+}) {
+  return (
+    <View style={[styles.iconBadge, { backgroundColor: bg }]}>
+      <SymbolView tintColor={tint} name={icon} size={16} />
+    </View>
   );
 }
 
@@ -249,24 +273,32 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     paddingHorizontal: Spacing.four,
-    paddingBottom: Spacing.one,
+    paddingBottom: Spacing.two,
     paddingTop: Spacing.three,
   },
   group: {
     marginHorizontal: Spacing.three,
-    borderRadius: Spacing.three,
+    borderRadius: Radii.card - 2,
+    borderWidth: 1,
     overflow: 'hidden',
   },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.two,
-    paddingVertical: Spacing.three,
+    gap: Spacing.two + 2,
+    paddingVertical: Spacing.three - 2,
     paddingHorizontal: Spacing.three,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   rowLabel: {
     flex: 1,
+  },
+  iconBadge: {
+    width: 32,
+    height: 32,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dot: {
     width: 10,

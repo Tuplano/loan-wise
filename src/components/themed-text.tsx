@@ -1,28 +1,49 @@
-import { Platform, StyleSheet, Text, type TextProps } from 'react-native';
+import { StyleSheet, Text, type TextProps } from 'react-native';
 
-import { Fonts, ThemeColor } from '@/constants/theme';
+import { Fonts, ManropeFamily, ThemeColor } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export type ThemedTextProps = TextProps & {
-  type?: 'default' | 'title' | 'small' | 'smallBold' | 'subtitle' | 'link' | 'linkPrimary' | 'code';
+  type?:
+    | 'default'
+    | 'display'
+    | 'title'
+    | 'subtitle'
+    | 'sectionLabel'
+    | 'small'
+    | 'smallBold'
+    | 'link'
+    | 'linkPrimary'
+    | 'code';
   themeColor?: ThemeColor;
+  /** Tabular figures, for money/percent values that should align in a column. */
+  numeric?: boolean;
 };
 
-export function ThemedText({ style, type = 'default', themeColor, ...rest }: ThemedTextProps) {
+export function ThemedText({
+  style,
+  type = 'default',
+  themeColor,
+  numeric,
+  ...rest
+}: ThemedTextProps) {
   const theme = useTheme();
 
   return (
     <Text
       style={[
         { color: theme[themeColor ?? 'text'] },
-        type === 'default' && styles.default,
+        styles.base,
+        type === 'display' && styles.display,
         type === 'title' && styles.title,
+        type === 'subtitle' && styles.subtitle,
+        type === 'sectionLabel' && styles.sectionLabel,
         type === 'small' && styles.small,
         type === 'smallBold' && styles.smallBold,
-        type === 'subtitle' && styles.subtitle,
         type === 'link' && styles.link,
-        type === 'linkPrimary' && styles.linkPrimary,
+        type === 'linkPrimary' && [styles.linkPrimary, { color: theme.primary }],
         type === 'code' && styles.code,
+        numeric && styles.numeric,
         style,
       ]}
       {...rest}
@@ -31,43 +52,63 @@ export function ThemedText({ style, type = 'default', themeColor, ...rest }: The
 }
 
 const styles = StyleSheet.create({
-  small: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: 500,
-  },
-  smallBold: {
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: 700,
-  },
-  default: {
+  base: {
+    fontFamily: ManropeFamily[500],
     fontSize: 16,
-    lineHeight: 24,
-    fontWeight: 500,
+    lineHeight: 22,
+    color: undefined,
+  },
+  numeric: {
+    fontVariant: ['tabular-nums'],
+    letterSpacing: -0.3,
+  },
+  display: {
+    fontFamily: ManropeFamily[800],
+    fontSize: 38,
+    lineHeight: 42,
+    letterSpacing: -0.5,
   },
   title: {
-    fontSize: 48,
-    fontWeight: 600,
-    lineHeight: 52,
+    fontFamily: ManropeFamily[800],
+    fontSize: 28,
+    lineHeight: 34,
+    letterSpacing: -0.4,
   },
   subtitle: {
-    fontSize: 32,
-    lineHeight: 44,
-    fontWeight: 600,
+    fontFamily: ManropeFamily[800],
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.3,
+  },
+  sectionLabel: {
+    fontFamily: ManropeFamily[700],
+    fontSize: 13,
+    lineHeight: 18,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  small: {
+    fontFamily: ManropeFamily[500],
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  smallBold: {
+    fontFamily: ManropeFamily[700],
+    fontSize: 13,
+    lineHeight: 18,
   },
   link: {
-    lineHeight: 30,
+    fontFamily: ManropeFamily[600],
+    lineHeight: 22,
     fontSize: 14,
   },
   linkPrimary: {
-    lineHeight: 30,
+    fontFamily: ManropeFamily[700],
+    lineHeight: 22,
     fontSize: 14,
-    color: '#3c87f7',
   },
   code: {
-    fontFamily: Fonts.mono,
-    fontWeight: Platform.select({ android: 700 }) ?? 500,
+    fontFamily: Fonts?.mono,
     fontSize: 12,
   },
 });

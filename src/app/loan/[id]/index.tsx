@@ -7,25 +7,22 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { PillBadge } from '@/components/ui/pill-badge';
+import { PrimaryButton } from '@/components/ui/primary-button';
+import { ProgressRing } from '@/components/ui/progress-ring';
+import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { db } from '@/db/client';
 import { loans, payments, reminders, type LoanStatus } from '@/db/schema';
 import { useTheme } from '@/hooks/use-theme';
 import { addMonths, formatDate } from '@/lib/date';
 import { formatMoney } from '@/lib/format';
 import { cancelReminder, scheduleLoanReminder } from '@/lib/notifications';
+import { getScheduleForLoan } from '@/lib/schedule';
 
 const statusLabel: Record<LoanStatus, string> = {
   active: 'Active',
   paid_off: 'Paid off',
   overdue: 'Overdue',
-};
-
-type ScheduleEntry = {
-  index: number;
-  dueDate: Date;
-  amountCents: number;
-  paid: boolean;
 };
 
 export default function LoanDetailScreen() {
@@ -61,15 +58,18 @@ export default function LoanDetailScreen() {
   const lastPaidIndex = paidCount > 0 ? paidCount - 1 : null;
   const reminder = loan.reminders[0];
 
-  const schedule: ScheduleEntry[] = Array.from({ length: loan.termMonths }, (_, index) => {
-    const payment = loan.payments[index];
-    return {
-      index,
-      dueDate: payment ? payment.paidAt : addMonths(loan.startDate, index),
-      amountCents: payment ? payment.amountCents : loan.monthlyPaymentCents,
-      paid: Boolean(payment),
-    };
-  });
+  const schedule = getScheduleForLoan(loan, loan.payments);
+
+  const principalPaidCents = loan.payments.reduce(
+    (sum, payment) => sum + (payment.principalPortionCents ?? 0),
+    0
+  );
+  const remainingCents = Math.max(loan.principalCents - principalPaidCents, 0);
+  const paidOffProgress =
+    loan.principalCents > 0 ? Math.min(principalPaidCents / loan.principalCents, 1) : 0;
+
+  const basePaymentCents = Math.round(loan.principalCents / loan.termMonths);
+  const interestPaymentCents = loan.monthlyPaymentCents - basePaymentCents;
 
   async function rescheduleReminder(newDueDate: Date | null) {
     if (!reminder || !reminder.enabled) return;
@@ -201,7 +201,7 @@ export default function LoanDetailScreen() {
             <View style={styles.headerActions}>
               <Pressable onPress={handleToggleReminder} hitSlop={8}>
                 <SymbolView
-                  tintColor={theme.text}
+                  tintColor={theme.primary}
                   name={{
                     ios: reminder?.enabled ? 'bell.fill' : 'bell',
                     android: reminder?.enabled ? 'notifications_active' : 'notifications_none',
@@ -211,15 +211,11 @@ export default function LoanDetailScreen() {
                 />
               </Pressable>
               <Pressable onPress={() => router.push(`/loan/${loan.id}/edit`)} hitSlop={8}>
-                <SymbolView
-                  tintColor={theme.text}
-                  name={{ ios: 'pencil', android: 'edit', web: 'edit' }}
-                  size={20}
-                />
+                <ThemedText type="linkPrimary">Edit</ThemedText>
               </Pressable>
               <Pressable onPress={handleDelete} hitSlop={8}>
                 <SymbolView
-                  tintColor={theme.text}
+                  tintColor={theme.danger}
                   name={{ ios: 'trash', android: 'delete', web: 'delete' }}
                   size={20}
                 />
@@ -231,37 +227,85 @@ export default function LoanDetailScreen() {
       <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
         <View style={styles.content}>
           <FlatList
+            style={styles.list}
             data={schedule}
             keyExtractor={(item) => String(item.index)}
             contentContainerStyle={styles.listContent}
             ListHeaderComponent={
               <View style={styles.header}>
-                <View style={styles.titleRow}>
-                  {loan.category?.color && (
-                    <View style={[styles.dot, { backgroundColor: loan.category.color }]} />
-                  )}
-                  <ThemedText type="small" themeColor="textSecondary">
-                    {[loan.category?.name, loan.lender].filter(Boolean).join(' · ') ||
-                      'Uncategorized'}
+                <View style={styles.titleBlock}>
+                  <PillBadge
+                    label={loan.category?.name ?? statusLabel[loan.status]}
+                    color={loan.category?.color ?? undefined}
+                  />
+                  <ThemedText type="title" style={styles.titleText}>
+                    {loan.name}
                   </ThemedText>
+                  {loan.lender && (
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {loan.lender}
+                    </ThemedText>
+                  )}
+                </View>
+
+                <View style={styles.ringWrap}>
+                  <ProgressRing progress={paidOffProgress} size={168} strokeWidth={14}>
+                    <ThemedText type="smallBold" themeColor="textSecondary">
+                      Paid off
+                    </ThemedText>
+                    <ThemedText type="display" numeric style={{ color: theme.primaryDark }}>
+                      {Math.round(paidOffProgress * 100)}%
+                    </ThemedText>
+                    <ThemedText type="small" themeColor="textSecondary" numeric>
+                      {formatMoney(principalPaidCents)} of {formatMoney(loan.principalCents)}
+                    </ThemedText>
+                  </ProgressRing>
                 </View>
 
                 <View style={styles.statsGrid}>
-                  <Stat label="Principal" value={formatMoney(loan.principalCents)} />
-                  <Stat label="Monthly payment" value={formatMoney(loan.monthlyPaymentCents)} />
-                  <Stat label="Interest / mo" value={`${loan.interestRate}%`} />
-                  <Stat label="Term" value={`${loan.termMonths} months`} />
-                  <Stat label="Start date" value={formatDate(loan.startDate)} />
-                  <Stat label="Status" value={statusLabel[loan.status]} />
+                  <StatCard label="Principal" value={formatMoney(loan.principalCents)} />
+                  <StatCard label="Monthly" value={formatMoney(loan.monthlyPaymentCents)} />
+                </View>
+
+                <View style={[styles.breakdownCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  <ThemedText type="smallBold" themeColor="textSecondary" style={styles.breakdownTitle}>
+                    Payment breakdown
+                  </ThemedText>
+                  <View style={styles.breakdownRow}>
+                    <ThemedText type="small">
+                      Base ({formatMoney(loan.principalCents)} ÷ {loan.termMonths} mo)
+                    </ThemedText>
+                    <ThemedText type="smallBold" numeric>
+                      {formatMoney(basePaymentCents)}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.breakdownRow}>
+                    <ThemedText type="small">Interest ({loan.interestRate}% / mo)</ThemedText>
+                    <ThemedText type="smallBold" numeric>
+                      {formatMoney(interestPaymentCents)}
+                    </ThemedText>
+                  </View>
+                  <View style={[styles.breakdownRow, styles.breakdownTotal, { borderTopColor: theme.divider }]}>
+                    <ThemedText type="smallBold">Monthly due</ThemedText>
+                    <ThemedText type="smallBold" numeric style={{ color: theme.primaryDark }}>
+                      {formatMoney(loan.monthlyPaymentCents)}
+                    </ThemedText>
+                  </View>
+                </View>
+
+                <View style={styles.miniStatsRow}>
+                  <MiniStat value={`${loan.termMonths} mo`} label="Term" />
+                  <MiniStat value={`${Math.max(loan.termMonths - paidCount, 0)} mo`} label="Left" />
+                  <MiniStat value={`${loan.interestRate}%`} label="Interest" />
                 </View>
 
                 {loan.notes && (
-                  <ThemedView type="backgroundElement" style={styles.notesBox}>
+                  <View style={[styles.notesBox, { backgroundColor: theme.backgroundElement }]}>
                     <ThemedText type="small">{loan.notes}</ThemedText>
-                  </ThemedView>
+                  </View>
                 )}
 
-                <ThemedText type="small" themeColor="textSecondary" style={styles.scheduleLabel}>
+                <ThemedText type="smallBold" style={styles.scheduleLabel}>
                   Payment schedule ({paidCount}/{loan.termMonths} paid)
                 </ThemedText>
               </View>
@@ -272,28 +316,35 @@ export default function LoanDetailScreen() {
               const interactive = isNextUnpaid || isLastPaid;
 
               const row = (
-                <View style={[styles.scheduleRow, { borderBottomColor: theme.backgroundSelected }]}>
+                <View style={[styles.scheduleRow, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  <View
+                    style={[
+                      styles.scheduleIcon,
+                      { backgroundColor: item.paid ? theme.successTint : theme.backgroundElement },
+                    ]}>
+                    {item.paid ? (
+                      <SymbolView
+                        tintColor={theme.primary}
+                        name={{ ios: 'checkmark', android: 'check', web: 'check' }}
+                        size={15}
+                      />
+                    ) : (
+                      <ThemedText type="smallBold" themeColor="textSecondary">
+                        {item.index + 1}
+                      </ThemedText>
+                    )}
+                  </View>
                   <View style={styles.scheduleLeading}>
-                    <ThemedText>Month {item.index + 1}</ThemedText>
+                    <ThemedText type="smallBold">Month {item.index + 1}</ThemedText>
                     <ThemedText type="small" themeColor="textSecondary">
                       {formatDate(item.dueDate)}
                     </ThemedText>
                   </View>
                   <View style={styles.scheduleTrailing}>
-                    <ThemedText themeColor={item.paid ? 'text' : 'textSecondary'}>
+                    <ThemedText type="smallBold" numeric themeColor={item.paid ? 'text' : 'textSecondary'}>
                       {formatMoney(item.amountCents)}
                     </ThemedText>
-                    {item.paid ? (
-                      <SymbolView
-                        tintColor={theme.text}
-                        name={{
-                          ios: 'checkmark.circle.fill',
-                          android: 'check_circle',
-                          web: 'check_circle',
-                        }}
-                        size={18}
-                      />
-                    ) : (
+                    {!item.paid && (
                       <ThemedText type="small" themeColor="textSecondary">
                         Upcoming
                       </ThemedText>
@@ -312,20 +363,44 @@ export default function LoanDetailScreen() {
                 </Pressable>
               );
             }}
+            ItemSeparatorComponent={() => <View style={{ height: Spacing.two }} />}
           />
+
+          {nextUnpaidIndex !== null && (
+            <View style={[styles.footer, { backgroundColor: theme.background, borderTopColor: theme.border }]}>
+              <PrimaryButton label="Log payment" onPress={handleMarkPaid} size="large" />
+            </View>
+          )}
         </View>
       </SafeAreaView>
     </ThemedView>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function StatCard({ label, value }: { label: string; value: string }) {
+  const theme = useTheme();
   return (
-    <View style={styles.stat}>
+    <View style={[styles.statCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
       <ThemedText type="small" themeColor="textSecondary">
         {label}
       </ThemedText>
-      <ThemedText>{value}</ThemedText>
+      <ThemedText type="smallBold" numeric style={styles.statCardValue}>
+        {value}
+      </ThemedText>
+    </View>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  const theme = useTheme();
+  return (
+    <View style={[styles.miniStat, { backgroundColor: theme.card, borderColor: theme.border }]}>
+      <ThemedText type="smallBold" numeric style={styles.statCardValue}>
+        {value}
+      </ThemedText>
+      <ThemedText type="small" themeColor="textSecondary">
+        {label}
+      </ThemedText>
     </View>
   );
 }
@@ -348,57 +423,107 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: MaxContentWidth,
   },
+  list: {
+    flex: 1,
+  },
   listContent: {
     paddingHorizontal: Spacing.three,
     paddingBottom: Spacing.four,
   },
   header: {
-    paddingHorizontal: Spacing.one,
     paddingTop: Spacing.three,
-    gap: Spacing.four,
+    gap: Spacing.three,
   },
-  titleRow: {
-    flexDirection: 'row',
+  titleBlock: {
     alignItems: 'center',
     gap: Spacing.one,
   },
-  dot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
+  titleText: {
+    marginTop: Spacing.one,
+  },
+  ringWrap: {
+    alignItems: 'center',
+    paddingVertical: Spacing.two,
   },
   statsGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.four,
+    gap: Spacing.two + 2,
   },
-  stat: {
-    gap: Spacing.half,
-    minWidth: 120,
+  statCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: Radii.row - 2,
+    padding: Spacing.three - 3,
+  },
+  statCardValue: {
+    fontSize: 17,
+    marginTop: 2,
+  },
+  breakdownCard: {
+    borderWidth: 1,
+    borderRadius: Radii.card - 2,
+    padding: Spacing.three,
+    gap: Spacing.two,
+  },
+  breakdownTitle: {
+    marginBottom: Spacing.one,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  breakdownTotal: {
+    paddingTop: Spacing.two,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  miniStatsRow: {
+    flexDirection: 'row',
+    gap: Spacing.two,
+  },
+  miniStat: {
+    flex: 1,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: Radii.row - 2,
+    paddingVertical: Spacing.two + 2,
   },
   notesBox: {
-    borderRadius: Spacing.two,
+    borderRadius: Radii.row - 2,
     padding: Spacing.three,
   },
   scheduleLabel: {
-    paddingTop: Spacing.two,
+    paddingTop: Spacing.one,
   },
   pressed: {
     opacity: 0.6,
   },
   scheduleRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: Spacing.three,
-    paddingHorizontal: Spacing.one,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: Spacing.two + 2,
+    borderWidth: 1,
+    borderRadius: Radii.row,
+    padding: Spacing.three - 3,
+  },
+  scheduleIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   scheduleLeading: {
-    gap: Spacing.half,
+    flex: 1,
+    gap: 1,
   },
   scheduleTrailing: {
     alignItems: 'flex-end',
-    gap: Spacing.half,
+    gap: 1,
+  },
+  footer: {
+    paddingHorizontal: Spacing.three,
+    paddingTop: Spacing.two,
+    paddingBottom: Spacing.two,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
 });

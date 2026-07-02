@@ -1,39 +1,124 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { useRouter } from 'expo-router';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { SymbolView } from 'expo-symbols';
+import { useMemo } from 'react';
+import { Pressable, SectionList, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { ProgressBar } from '@/components/ui/progress-bar';
+import { BottomTabInset, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { db } from '@/db/client';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDate } from '@/lib/date';
 import { formatMoney } from '@/lib/format';
+import { getScheduleForLoan } from '@/lib/schedule';
+import { isSameMonth, monthLabel, sumPaymentsInMonth } from '@/lib/stats';
+
+type PaymentEntry = {
+  key: string;
+  loanId: number;
+  loanName: string;
+  paidAt: Date;
+  amountCents: number;
+  principalPortionCents: number;
+  interestPortionCents: number;
+  onTime: boolean;
+  daysLate: number;
+};
 
 export default function PaymentsScreen() {
   const theme = useTheme();
   const router = useRouter();
 
-  const { data: paymentList } = useLiveQuery(
-    db.query.payments.findMany({
-      with: { loan: true },
-      orderBy: (fields, { desc }) => [desc(fields.paidAt)],
+  const { data: loanList } = useLiveQuery(
+    db.query.loans.findMany({
+      with: { payments: { orderBy: (fields, { asc }) => [asc(fields.paidAt)] } },
     })
   );
+
+  const allPayments = useMemo(() => loanList.flatMap((loan) => loan.payments), [loanList]);
+  const activeLoans = loanList.filter((loan) => loan.status === 'active');
+  const paidThisMonthCents = sumPaymentsInMonth(allPayments);
+  const now = new Date();
+  const madeThisMonth = activeLoans.filter((loan) =>
+    loan.payments.some((payment) => isSameMonth(payment.paidAt, now))
+  );
+  const remainingCents = activeLoans
+    .filter((loan) => !madeThisMonth.includes(loan))
+    .reduce((sum, loan) => sum + loan.monthlyPaymentCents, 0);
+  const monthProgress = activeLoans.length > 0 ? madeThisMonth.length / activeLoans.length : 0;
+
+  const sections = useMemo(() => {
+    const entries: PaymentEntry[] = loanList.flatMap((loan) =>
+      getScheduleForLoan(loan, loan.payments)
+        .filter((entry) => entry.paid && entry.payment)
+        .map((entry) => ({
+          key: `${loan.id}-${entry.payment!.id}`,
+          loanId: loan.id,
+          loanName: loan.name,
+          paidAt: entry.payment!.paidAt,
+          amountCents: entry.payment!.amountCents,
+          principalPortionCents: entry.payment!.principalPortionCents ?? 0,
+          interestPortionCents: entry.payment!.interestPortionCents ?? 0,
+          onTime: entry.onTime,
+          daysLate: entry.daysLate,
+        }))
+    );
+    entries.sort((a, b) => b.paidAt.getTime() - a.paidAt.getTime());
+
+    const groups = new Map<string, PaymentEntry[]>();
+    for (const entry of entries) {
+      const key = monthLabel(entry.paidAt);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(entry);
+    }
+    return Array.from(groups.entries()).map(([title, data]) => ({ title, data }));
+  }, [loanList]);
 
   return (
     <ThemedView style={styles.container}>
       <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
         <View style={styles.content}>
           <View style={styles.header}>
-            <ThemedText type="subtitle">Payments</ThemedText>
+            <ThemedText type="title">Payments</ThemedText>
           </View>
 
-          <FlatList
-            data={paymentList}
-            keyExtractor={(item) => String(item.id)}
+          <View style={[styles.summaryCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={styles.summaryRow}>
+              <View>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Paid in {monthLabel(now).split(' ')[0]}
+                </ThemedText>
+                <ThemedText type="title" numeric style={styles.summaryValue}>
+                  {formatMoney(paidThisMonthCents)}
+                </ThemedText>
+              </View>
+              <View style={styles.summaryRight}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Remaining
+                </ThemedText>
+                <ThemedText
+                  type="smallBold"
+                  numeric
+                  style={[styles.summaryRemaining, { color: theme.danger }]}>
+                  {formatMoney(remainingCents)}
+                </ThemedText>
+              </View>
+            </View>
+            <ProgressBar progress={monthProgress} />
+            <ThemedText type="small" themeColor="textSecondary">
+              {madeThisMonth.length} of {activeLoans.length} payments made this month
+            </ThemedText>
+          </View>
+
+          <SectionList
+            sections={sections}
+            keyExtractor={(item) => item.key}
             contentContainerStyle={styles.listContent}
+            stickySectionHeadersEnabled={false}
+            ItemSeparatorComponent={() => <View style={{ height: Spacing.two }} />}
             ListEmptyComponent={
               <View style={styles.emptyState}>
                 <ThemedText themeColor="textSecondary">No payments logged yet.</ThemedText>
@@ -42,18 +127,44 @@ export default function PaymentsScreen() {
                 </ThemedText>
               </View>
             }
+            renderSectionHeader={({ section }) => (
+              <ThemedText type="sectionLabel" themeColor="textSecondary" style={styles.sectionHeader}>
+                {section.title}
+              </ThemedText>
+            )}
             renderItem={({ item }) => (
               <Pressable
                 onPress={() => router.push(`/loan/${item.loanId}`)}
                 style={({ pressed }) => pressed && styles.pressed}>
-                <View style={[styles.row, { borderBottomColor: theme.backgroundSelected }]}>
+                <View style={[styles.row, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  <View
+                    style={[
+                      styles.rowIcon,
+                      { backgroundColor: item.onTime ? theme.successTint : theme.dangerTint },
+                    ]}>
+                    <SymbolView
+                      tintColor={item.onTime ? theme.primary : theme.danger}
+                      name={
+                        item.onTime
+                          ? { ios: 'checkmark', android: 'check', web: 'check' }
+                          : { ios: 'clock', android: 'schedule', web: 'schedule' }
+                      }
+                      size={15}
+                    />
+                  </View>
                   <View style={styles.rowLeading}>
-                    <ThemedText numberOfLines={1}>{item.loan.name}</ThemedText>
-                    <ThemedText type="small" themeColor="textSecondary">
-                      {formatDate(item.paidAt)}
+                    <ThemedText type="smallBold" numberOfLines={1} style={styles.rowTitle}>
+                      {item.loanName}
+                    </ThemedText>
+                    <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
+                      {item.onTime
+                        ? `${formatDate(item.paidAt)} · ${formatMoney(item.principalPortionCents)} principal + ${formatMoney(item.interestPortionCents)} int`
+                        : `${formatDate(item.paidAt)} · ${item.daysLate} day${item.daysLate === 1 ? '' : 's'} late`}
                     </ThemedText>
                   </View>
-                  <ThemedText>{formatMoney(item.amountCents)}</ThemedText>
+                  <ThemedText type="smallBold" numeric style={{ color: theme.primaryDark }}>
+                    {formatMoney(item.amountCents)}
+                  </ThemedText>
                 </View>
               </Pressable>
             )}
@@ -76,35 +187,70 @@ const styles = StyleSheet.create({
     flex: 1,
     width: '100%',
     maxWidth: MaxContentWidth,
+    paddingHorizontal: Spacing.three,
   },
   header: {
-    paddingHorizontal: Spacing.four,
     paddingVertical: Spacing.three,
   },
   pressed: {
     opacity: 0.6,
   },
+  summaryCard: {
+    borderWidth: 1,
+    borderRadius: Radii.card,
+    padding: Spacing.three + 2,
+    gap: Spacing.two + 2,
+    marginBottom: Spacing.three,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  summaryRight: {
+    alignItems: 'flex-end',
+  },
+  summaryValue: {
+    marginTop: 2,
+  },
+  summaryRemaining: {
+    fontSize: 17,
+    marginTop: 2,
+  },
+  sectionHeader: {
+    paddingTop: Spacing.three,
+    paddingBottom: Spacing.two,
+  },
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.one,
-    paddingHorizontal: Spacing.four,
     paddingTop: Spacing.six,
   },
   row: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: Spacing.three,
-    paddingHorizontal: Spacing.three,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: Spacing.two + 2,
+    borderWidth: 1,
+    borderRadius: Radii.row,
+    padding: Spacing.three - 2,
+  },
+  rowIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   rowLeading: {
-    gap: Spacing.half,
-    flexShrink: 1,
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
+  },
+  rowTitle: {
+    fontSize: 15,
   },
   listContent: {
-    paddingHorizontal: Spacing.three,
     paddingBottom: BottomTabInset + Spacing.three,
   },
 });
