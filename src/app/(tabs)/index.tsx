@@ -16,6 +16,7 @@ import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDate } from '@/lib/date';
 import { formatMoney } from '@/lib/format';
+import { isOpenStatus } from '@/lib/loan-status';
 import { sumPaymentsInMonth } from '@/lib/stats';
 
 function greeting() {
@@ -33,7 +34,9 @@ export default function DashboardScreen() {
   const { data: loans } = useLiveQuery(db.query.loans.findMany({ with: { payments: true, category: true } }));
   const { data: allPayments } = useLiveQuery(db.query.payments.findMany());
 
-  const activeLoans = loans.filter((loan) => loan.status === 'active');
+  const activeLoans = loans.filter((loan) => isOpenStatus(loan.status));
+  const overdueLoans = loans.filter((loan) => loan.status === 'overdue');
+  const overdueTotalCents = overdueLoans.reduce((sum, loan) => sum + loan.monthlyPaymentCents, 0);
 
   const totalPrincipalCents = activeLoans.reduce((sum, loan) => sum + loan.principalCents, 0);
   const paidPrincipalCents = activeLoans.reduce((sum, loan) => {
@@ -74,6 +77,35 @@ export default function DashboardScreen() {
             paidPrincipalCents={paidPrincipalCents}
             activeCount={activeLoans.length}
           />
+
+          {overdueLoans.length > 0 && (
+            <Pressable
+              onPress={() => router.push('/loans')}
+              style={({ pressed }) => pressed && styles.pressed}>
+              <View style={[styles.overdueCard, { backgroundColor: theme.dangerTint, borderColor: theme.danger }]}>
+                <View style={[styles.overdueIcon, { backgroundColor: theme.danger }]}>
+                  <SymbolView
+                    tintColor="#FFFFFF"
+                    name={{ ios: 'exclamationmark.triangle.fill', android: 'warning', web: 'warning' }}
+                    size={16}
+                  />
+                </View>
+                <View style={styles.overdueTextGroup}>
+                  <ThemedText type="smallBold" style={{ color: theme.danger }}>
+                    {overdueLoans.length === 1 ? '1 loan is overdue' : `${overdueLoans.length} loans are overdue`}
+                  </ThemedText>
+                  <ThemedText type="small" style={{ color: theme.danger }}>
+                    {formatMoney(overdueTotalCents, currency)} past due
+                  </ThemedText>
+                </View>
+                <SymbolView
+                  tintColor={theme.danger}
+                  name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
+                  size={16}
+                />
+              </View>
+            </Pressable>
+          )}
 
           <View style={styles.statsRow}>
             <StatCard
@@ -233,6 +265,28 @@ const styles = StyleSheet.create({
     paddingTop: Spacing.two,
     paddingBottom: Spacing.two,
     gap: Spacing.half,
+  },
+  pressed: {
+    opacity: 0.75,
+  },
+  overdueCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two + 2,
+    borderWidth: 1,
+    borderRadius: Radii.row,
+    padding: Spacing.three - 2,
+  },
+  overdueIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  overdueTextGroup: {
+    flex: 1,
+    gap: 1,
   },
   statsRow: {
     flexDirection: 'row',

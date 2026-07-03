@@ -52,8 +52,8 @@ export function LoanRow({
   const currency = useCurrency();
   const progress = principalCents > 0 ? paidCents / principalCents : 0;
   const daysUntilDue = (nextDueDate.getTime() - Date.now()) / 86_400_000;
-  const isOverdue = status === 'active' && daysUntilDue < 0;
-  const isDueSoon = status === 'active' && !isOverdue && daysUntilDue <= 5;
+  const isOverdue = status === 'overdue';
+  const isDueSoon = status === 'active' && daysUntilDue <= 5;
 
   return (
     <Animated.View entering={FadeInDown.duration(280).delay(Math.min(index * 40, 200))}>

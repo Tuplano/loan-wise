@@ -14,9 +14,10 @@ import { BottomTabInset, MaxContentWidth, Radii, Spacing } from '@/constants/the
 import { db } from '@/db/client';
 import { loans } from '@/db/schema';
 import { useTheme } from '@/hooks/use-theme';
+import { isOpenStatus } from '@/lib/loan-status';
 import { cancelReminder } from '@/lib/notifications';
 
-type FilterKey = 'active' | 'paid' | 'all';
+type FilterKey = 'active' | 'overdue' | 'paid' | 'all';
 
 export default function LoansScreen() {
   const theme = useTheme();
@@ -32,12 +33,14 @@ export default function LoansScreen() {
     })
   );
 
-  const activeCount = loanList.filter((loan) => loan.status === 'active').length;
+  const activeCount = loanList.filter((loan) => isOpenStatus(loan.status)).length;
+  const overdueCount = loanList.filter((loan) => loan.status === 'overdue').length;
   const paidCount = loanList.filter((loan) => loan.status === 'paid_off').length;
 
   const filteredLoans = useMemo(() => {
     const byStatus = loanList.filter((loan) => {
-      if (filter === 'active') return loan.status === 'active';
+      if (filter === 'active') return isOpenStatus(loan.status);
+      if (filter === 'overdue') return loan.status === 'overdue';
       if (filter === 'paid') return loan.status === 'paid_off';
       return true;
     });
@@ -118,6 +121,11 @@ export default function LoansScreen() {
               label={`Active · ${activeCount}`}
               selected={filter === 'active'}
               onPress={() => setFilter('active')}
+            />
+            <SegmentButton
+              label={`Overdue · ${overdueCount}`}
+              selected={filter === 'overdue'}
+              onPress={() => setFilter('overdue')}
             />
             <SegmentButton
               label={`Paid · ${paidCount}`}

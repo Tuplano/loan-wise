@@ -6,6 +6,7 @@ import { Alert } from 'react-native';
 import { LoanForm } from '@/components/loan-form';
 import { db } from '@/db/client';
 import { loans, payments } from '@/db/schema';
+import { deriveLoanStatus } from '@/lib/loan-status';
 import { buildInstallmentSchedule, computeNextDueDate } from '@/lib/schedule';
 
 export default function EditLoanScreen() {
@@ -63,21 +64,20 @@ export default function EditLoanScreen() {
           await db.insert(payments).values(rowsToInsert);
         }
 
-        const isFullyPaid = paidNumbers.size >= values.termMonths;
-        const nextDueDate = computeNextDueDate(
-          desiredSchedule.map((installment) => ({
-            installmentNumber: installment.installmentNumber,
-            dueDate: installment.dueDate,
-            isPaid: paidNumbers.has(installment.installmentNumber),
-          }))
-        );
+        const scheduleRows = desiredSchedule.map((installment) => ({
+          installmentNumber: installment.installmentNumber,
+          dueDate: installment.dueDate,
+          isPaid: paidNumbers.has(installment.installmentNumber),
+        }));
+        const nextDueDate = computeNextDueDate(scheduleRows);
+        const status = deriveLoanStatus(scheduleRows);
 
         await db
           .update(loans)
           .set({
             ...values,
             nextDueDate,
-            status: isFullyPaid ? 'paid_off' : 'active',
+            status,
             updatedAt: new Date(),
           })
           .where(eq(loans.id, loan.id));

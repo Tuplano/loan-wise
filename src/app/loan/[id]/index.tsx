@@ -18,6 +18,7 @@ import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDate, ordinalSuffix } from '@/lib/date';
 import { formatMoney } from '@/lib/format';
+import { deriveLoanStatus } from '@/lib/loan-status';
 import { cancelReminder, scheduleLoanReminder } from '@/lib/notifications';
 import { computeNextDueDate, getScheduleForLoan, scheduleAnchor } from '@/lib/schedule';
 
@@ -145,14 +146,15 @@ export default function LoanDetailScreen() {
       const updatedRows = loan.payments.map((row) =>
         row.id === payment.id ? { ...row, isPaid: nextIsPaid, paidAt: nextIsPaid ? now : null } : row
       );
-      const isFullyPaid = updatedRows.every((row) => row.isPaid);
+      const nextStatus = deriveLoanStatus(updatedRows);
+      const isFullyPaid = nextStatus === 'paid_off';
       const newDueDate = computeNextDueDate(updatedRows);
 
       await db
         .update(loans)
         .set({
           nextDueDate: newDueDate,
-          status: isFullyPaid ? 'paid_off' : 'active',
+          status: nextStatus,
           updatedAt: now,
         })
         .where(eq(loans.id, loan.id));

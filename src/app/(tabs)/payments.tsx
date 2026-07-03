@@ -15,6 +15,7 @@ import { useCurrency } from '@/hooks/use-currency';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDate } from '@/lib/date';
 import { formatMoney } from '@/lib/format';
+import { isOpenStatus } from '@/lib/loan-status';
 import { getScheduleForLoan } from '@/lib/schedule';
 import { isSameMonth, monthLabel, sumPaymentsInMonth } from '@/lib/stats';
 
@@ -42,7 +43,7 @@ export default function PaymentsScreen() {
   );
 
   const allPayments = useMemo(() => loanList.flatMap((loan) => loan.payments), [loanList]);
-  const activeLoans = loanList.filter((loan) => loan.status === 'active');
+  const activeLoans = loanList.filter((loan) => isOpenStatus(loan.status));
   const paidThisMonthCents = sumPaymentsInMonth(allPayments);
   const now = new Date();
   const madeThisMonth = activeLoans.filter((loan) =>

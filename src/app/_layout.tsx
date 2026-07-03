@@ -10,12 +10,13 @@ import { useMigrations } from 'drizzle-orm/expo-sqlite/migrator';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import { useColorScheme } from 'react-native';
+import { AppState, useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { db } from '@/db/client';
 import migrations from '@/db/migrations/migrations';
 import { seedAppSettings, seedDefaultCategories } from '@/db/seed';
+import { refreshAllLoanStatuses } from '@/lib/loan-status';
 
 import '@/global.css';
 
@@ -37,7 +38,16 @@ export default function RootLayout() {
     if (success) {
       seedDefaultCategories();
       seedAppSettings();
+      refreshAllLoanStatuses();
     }
+  }, [success]);
+
+  useEffect(() => {
+    if (!success) return;
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') refreshAllLoanStatuses();
+    });
+    return () => subscription.remove();
   }, [success]);
 
   if (error) {
