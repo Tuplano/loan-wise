@@ -1,11 +1,13 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { eq } from 'drizzle-orm';
 import { useRouter } from 'expo-router';
+import * as DocumentPicker from 'expo-document-picker';
+import { File } from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useState } from 'react';
 import Constants from 'expo-constants';
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -14,6 +16,7 @@ import { BottomTabInset, MaxContentWidth, Radii, Spacing } from '@/constants/the
 import { db } from '@/db/client';
 import { appSettings, type AppearanceMode } from '@/db/schema';
 import { useTheme } from '@/hooks/use-theme';
+import { exportBackup, exportPaymentsCsv, importBackup, validateBackup } from '@/lib/backup';
 import { CURRENCY_OPTIONS, type CurrencyCode } from '@/lib/currency';
 import { ensureNotificationPermission, isNotificationsAvailable } from '@/lib/notifications';
 
@@ -37,6 +40,7 @@ export default function SettingsScreen() {
   const [expandedPicker, setExpandedPicker] = useState<'currency' | 'appearance' | null>(null);
   const [editingInterestRate, setEditingInterestRate] = useState(false);
   const [interestRateDraft, setInterestRateDraft] = useState('');
+  const [dataBusy, setDataBusy] = useState(false);
 
   async function handleToggleReminders(value: boolean) {
     if (!settings) return;
@@ -122,6 +126,74 @@ export default function SettingsScreen() {
       .set({ defaultInterestRate: Number.isFinite(parsed) ? Math.max(parsed, 0) : 0 })
       .where(eq(appSettings.id, settings.id));
     setEditingInterestRate(false);
+  }
+
+  async function handleExportBackup() {
+    if (dataBusy) return;
+    setDataBusy(true);
+    try {
+      await exportBackup();
+    } catch (error) {
+      Alert.alert('Export failed', error instanceof Error ? error.message : 'Something went wrong.');
+    } finally {
+      setDataBusy(false);
+    }
+  }
+
+  async function handleExportCsv() {
+    if (dataBusy) return;
+    setDataBusy(true);
+    try {
+      await exportPaymentsCsv();
+    } catch (error) {
+      Alert.alert('Export failed', error instanceof Error ? error.message : 'Something went wrong.');
+    } finally {
+      setDataBusy(false);
+    }
+  }
+
+  async function handleImportBackup() {
+    if (dataBusy) return;
+
+    const result = await DocumentPicker.getDocumentAsync({
+      type: 'application/json',
+      copyToCacheDirectory: true,
+    });
+    if (result.canceled) return;
+
+    setDataBusy(true);
+    try {
+      const raw = JSON.parse(await new File(result.assets[0].uri).text());
+      const validation = validateBackup(raw);
+      if (!validation.ok) {
+        Alert.alert('Invalid backup', validation.error);
+        return;
+      }
+
+      Alert.alert(
+        'Replace all data?',
+        "Importing will delete your current loans, payments, categories, and settings, and replace them with this backup. This can't be undone.",
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Import',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                await importBackup(validation.data);
+                Alert.alert('Import complete', 'Your data has been restored from the backup.');
+              } catch (error) {
+                Alert.alert('Import failed', error instanceof Error ? error.message : 'Something went wrong.');
+              }
+            },
+          },
+        ]
+      );
+    } catch {
+      Alert.alert('Invalid backup', 'Could not read that file as a backup.');
+    } finally {
+      setDataBusy(false);
+    }
   }
 
   const initials = (settings?.displayName ?? 'You')
@@ -414,6 +486,64 @@ export default function SettingsScreen() {
               </View>
             </Pressable>
           </View>
+
+          {Platform.OS !== 'web' && (
+            <>
+              <ThemedText type="sectionLabel" themeColor="textMuted" style={styles.sectionLabel}>
+                Data
+              </ThemedText>
+              <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <Pressable onPress={handleExportBackup} disabled={dataBusy}>
+                  <View style={[styles.row, { borderBottomColor: theme.divider }]}>
+                    <IconBadge
+                      icon={{ ios: 'square.and.arrow.up', android: 'ios_share', web: 'ios_share' }}
+                      tint={theme.primary}
+                      bg={theme.primaryTint}
+                    />
+                    <ThemedText style={styles.rowLabel}>Export backup</ThemedText>
+                    <SymbolView
+                      tintColor={theme.textMuted}
+                      name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
+                      size={14}
+                      style={styles.chevron}
+                    />
+                  </View>
+                </Pressable>
+                <Pressable onPress={handleExportCsv} disabled={dataBusy}>
+                  <View style={[styles.row, { borderBottomColor: theme.divider }]}>
+                    <IconBadge
+                      icon={{ ios: 'tablecells', android: 'table_chart', web: 'table_chart' }}
+                      tint={theme.primary}
+                      bg={theme.primaryTint}
+                    />
+                    <ThemedText style={styles.rowLabel}>Export payments (CSV)</ThemedText>
+                    <SymbolView
+                      tintColor={theme.textMuted}
+                      name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
+                      size={14}
+                      style={styles.chevron}
+                    />
+                  </View>
+                </Pressable>
+                <Pressable onPress={handleImportBackup} disabled={dataBusy}>
+                  <View style={[styles.row, styles.rowNoBorder]}>
+                    <IconBadge
+                      icon={{ ios: 'square.and.arrow.down', android: 'file_download', web: 'file_download' }}
+                      tint={theme.danger}
+                      bg={theme.dangerTint}
+                    />
+                    <ThemedText style={styles.rowLabel}>Import backup</ThemedText>
+                    <SymbolView
+                      tintColor={theme.textMuted}
+                      name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
+                      size={14}
+                      style={styles.chevron}
+                    />
+                  </View>
+                </Pressable>
+              </View>
+            </>
+          )}
 
           <ThemedText type="sectionLabel" themeColor="textMuted" style={styles.sectionLabel}>
             About

@@ -21,8 +21,8 @@ export function CategoryBars({ slices }: CategoryBarsProps) {
     <View style={styles.container}>
       {slices.map((slice) => {
         const total = slice.paidCents + slice.owedCents;
-        const paidWidth = `${(slice.paidCents / maxTotal) * 100}%` as const;
-        const owedWidth = `${(slice.owedCents / maxTotal) * 100}%` as const;
+        const paidWidth = `${(slice.paidCents / maxTotal) * 100}%` as `${number}%`;
+        const owedWidth = `${(slice.owedCents / maxTotal) * 100}%` as `${number}%`;
         const color = slice.color ?? theme.textMuted;
 
         return (

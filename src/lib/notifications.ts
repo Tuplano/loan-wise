@@ -51,6 +51,13 @@ export async function cancelReminder(notificationId: string | null) {
   await Notifications.cancelScheduledNotificationAsync(notificationId).catch(() => {});
 }
 
+/** Cancels every locally scheduled notification — used before a backup import replaces all reminders. */
+export async function cancelAllScheduledNotifications() {
+  const Notifications = getNotifications();
+  if (!Notifications) return;
+  await Notifications.cancelAllScheduledNotificationsAsync().catch(() => {});
+}
+
 export async function scheduleLoanReminder(options: {
   loanName: string;
   amountLabel: string;
