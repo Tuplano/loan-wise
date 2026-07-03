@@ -71,20 +71,21 @@ function KeypadButton({ label, onPress }: { label: string; onPress: () => void }
         onPress();
       }}
       style={({ pressed }) => [styles.keypadKey, pressed && { backgroundColor: theme.backgroundElement }]}>
-      <ThemedText type="title" style={styles.keypadLabel}>
-        {label}
-      </ThemedText>
+      <ThemedText style={styles.keypadLabel}>{label}</ThemedText>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    width: '100%',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: Spacing.five,
   },
   dotsRow: {
     flexDirection: 'row',
+    justifyContent: 'center',
     gap: Spacing.three,
   },
   dot: {
@@ -94,10 +95,13 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
   },
   keypad: {
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: Spacing.three,
   },
   keypadRow: {
     flexDirection: 'row',
+    justifyContent: 'center',
     gap: Spacing.four,
   },
   keypadKey: {
@@ -109,5 +113,8 @@ const styles = StyleSheet.create({
   },
   keypadLabel: {
     fontSize: 26,
+    lineHeight: 30,
+    textAlign: 'center',
+    includeFontPadding: false,
   },
 });

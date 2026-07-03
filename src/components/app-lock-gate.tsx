@@ -15,10 +15,13 @@ export function AppLockGate({ children }: AppLockGateProps) {
 
   // Fail-secure: assume locked until settings confirm otherwise.
   const [locked, setLocked] = useState(true);
+  const [initialized, setInitialized] = useState(false);
 
-  useEffect(() => {
-    if (settingsLoaded) setLocked(appLockEnabled);
-  }, [settingsLoaded, appLockEnabled]);
+  // Once settings load for the first time, snap `locked` to the persisted setting.
+  if (settingsLoaded && !initialized) {
+    setInitialized(true);
+    setLocked(appLockEnabled);
+  }
 
   useEffect(() => {
     if (!appLockEnabled) return;

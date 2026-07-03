@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
@@ -16,10 +16,13 @@ type PaymentNoteModalProps = {
 export function PaymentNoteModal({ visible, initialNote, onSave, onClose }: PaymentNoteModalProps) {
   const theme = useTheme();
   const [note, setNote] = useState(initialNote ?? '');
+  const [wasVisible, setWasVisible] = useState(visible);
 
-  useEffect(() => {
+  // Re-seed the draft from the incoming payment's note each time the modal opens.
+  if (visible !== wasVisible) {
+    setWasVisible(visible);
     if (visible) setNote(initialNote ?? '');
-  }, [visible, initialNote]);
+  }
 
   function handleSave() {
     const trimmed = note.trim();

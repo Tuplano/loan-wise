@@ -19,6 +19,8 @@ type CategoryLike = {
 };
 
 type LoanLike = {
+  id: number;
+  name: string;
   principalCents: number;
   status: LoanStatus;
   payments: PaymentLike[];
@@ -31,6 +33,39 @@ export type BalancePoint = {
   projected: boolean;
 };
 
+/** Every month from the earliest scheduled installment through the latest, across all given loans. */
+function monthRange(loans: LoanLike[], now: Date): Date[] {
+  const allDueDates = loans.flatMap((loan) => loan.payments.map((payment) => payment.dueDate));
+  if (allDueDates.length === 0) return [];
+
+  const minMonth = startOfMonth(new Date(Math.min(...allDueDates.map((d) => d.getTime()), now.getTime())));
+  const maxMonth = startOfMonth(new Date(Math.max(...allDueDates.map((d) => d.getTime()), now.getTime())));
+
+  const months: Date[] = [];
+  let cursor = minMonth;
+  while (cursor.getTime() <= maxMonth.getTime()) {
+    months.push(cursor);
+    cursor = addMonths(cursor, 1);
+  }
+  return months;
+}
+
+/** A single loan's outstanding balance as of the end of `monthStart`'s month. Actual history is used
+ * up to the current month; later months project forward assuming on-schedule payment. */
+function balanceAtMonth(loan: LoanLike, monthStart: Date, currentMonth: Date): number {
+  const monthEnd = addMonths(monthStart, 1);
+  const projected = monthStart.getTime() > currentMonth.getTime();
+
+  const settledPrincipal = loan.payments.reduce((sum, payment) => {
+    const isSettled = projected
+      ? payment.dueDate.getTime() < monthEnd.getTime()
+      : payment.isPaid && !!payment.paidAt && payment.paidAt.getTime() < monthEnd.getTime();
+    return isSettled ? sum + payment.principalPortionCents : sum;
+  }, 0);
+
+  return Math.max(loan.principalCents - settledPrincipal, 0);
+}
+
 /**
  * Total outstanding balance across all loans, one point per month, from the
  * earliest scheduled installment through the latest. Months up to and including
@@ -38,35 +73,40 @@ export type BalancePoint = {
  * every remaining installment is paid on its scheduled due date.
  */
 export function buildBalanceTimeline(loans: LoanLike[], now: Date = new Date()): BalancePoint[] {
-  const allDueDates = loans.flatMap((loan) => loan.payments.map((payment) => payment.dueDate));
-  if (allDueDates.length === 0) return [];
-
   const currentMonth = startOfMonth(now);
-  const minMonth = startOfMonth(new Date(Math.min(...allDueDates.map((d) => d.getTime()), now.getTime())));
-  const maxMonth = startOfMonth(new Date(Math.max(...allDueDates.map((d) => d.getTime()), now.getTime())));
+  return monthRange(loans, now).map((month) => ({
+    month,
+    balanceCents: loans.reduce((sum, loan) => sum + balanceAtMonth(loan, month, currentMonth), 0),
+    projected: month.getTime() > currentMonth.getTime(),
+  }));
+}
 
-  const points: BalancePoint[] = [];
-  let cursor = minMonth;
+export type LoanBalanceLine = {
+  loanId: number;
+  name: string;
+  color: string | null;
+  points: BalancePoint[];
+};
 
-  while (cursor.getTime() <= maxMonth.getTime()) {
-    const monthEnd = addMonths(cursor, 1);
-    const projected = cursor.getTime() > currentMonth.getTime();
+/**
+ * One balance line per loan, all sharing the same month range so they can be overlaid on a single
+ * chart — each line flattens to zero once that loan is (or is projected to be) fully paid off, making
+ * it visually obvious when each individual loan ends relative to the others.
+ */
+export function buildPerLoanBalanceTimelines(loans: LoanLike[], now: Date = new Date()): LoanBalanceLine[] {
+  const months = monthRange(loans, now);
+  const currentMonth = startOfMonth(now);
 
-    const balanceCents = loans.reduce((sum, loan) => {
-      const settledPrincipal = loan.payments.reduce((paidSum, payment) => {
-        const isSettled = projected
-          ? payment.dueDate.getTime() < monthEnd.getTime()
-          : payment.isPaid && !!payment.paidAt && payment.paidAt.getTime() < monthEnd.getTime();
-        return isSettled ? paidSum + payment.principalPortionCents : paidSum;
-      }, 0);
-      return sum + Math.max(loan.principalCents - settledPrincipal, 0);
-    }, 0);
-
-    points.push({ month: cursor, balanceCents, projected });
-    cursor = addMonths(cursor, 1);
-  }
-
-  return points;
+  return loans.map((loan) => ({
+    loanId: loan.id,
+    name: loan.name,
+    color: loan.category?.color ?? null,
+    points: months.map((month) => ({
+      month,
+      balanceCents: balanceAtMonth(loan, month, currentMonth),
+      projected: month.getTime() > currentMonth.getTime(),
+    })),
+  }));
 }
 
 /** The latest due date among unpaid installments of loans that aren't fully paid off, or null if debt-free. */
