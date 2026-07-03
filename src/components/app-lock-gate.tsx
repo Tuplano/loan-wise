@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { AppState } from 'react-native';
+import { AppState, StyleSheet } from 'react-native';
 
 import { LockScreen } from '@/components/lock-screen';
+import { ThemedView } from '@/components/themed-view';
 import { useAppSettings } from '@/hooks/use-app-settings';
 
 type AppLockGateProps = {
@@ -31,12 +32,23 @@ export function AppLockGate({ children }: AppLockGateProps) {
     return () => subscription.remove();
   }, [appLockEnabled]);
 
+  // Settings (and therefore whether app lock is even on) haven't loaded yet — render a blank
+  // frame instead of `children`, so a locked user never gets a glimpse of the dashboard
+  // underneath before the lock screen has a chance to mount.
+  if (!settingsLoaded) {
+    return <ThemedView style={styles.blank} />;
+  }
+
   return (
     <>
       {children}
-      {settingsLoaded && appLockEnabled && locked && (
-        <LockScreen onUnlock={() => setLocked(false)} />
-      )}
+      {appLockEnabled && locked && <LockScreen onUnlock={() => setLocked(false)} />}
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  blank: {
+    flex: 1,
+  },
+});
