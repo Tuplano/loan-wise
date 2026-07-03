@@ -1,5 +1,7 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
+import { SymbolView } from 'expo-symbols';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -27,6 +29,7 @@ type FilterMode = 'category' | 'loan';
 export default function InsightsScreen() {
   const theme = useTheme();
   const { format } = useDisplayMoney();
+  const router = useRouter();
   const [filterMode, setFilterMode] = useState<FilterMode>('category');
   const [categoryFilter, setCategoryFilter] = useState<number | 'all'>('all');
   const [loanFilter, setLoanFilter] = useState<number | 'all'>('all');
@@ -180,6 +183,32 @@ export default function InsightsScreen() {
                   </ThemedText>
                 </View>
               </View>
+
+              <Pressable
+                onPress={() => router.push('/payoff-planner')}
+                style={({ pressed }) => pressed && styles.pressed}>
+                <View
+                  style={[styles.card, styles.plannerCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                  <View style={[styles.plannerIcon, { backgroundColor: theme.primaryTint }]}>
+                    <SymbolView
+                      tintColor={theme.primary}
+                      name={{ ios: 'bolt.fill', android: 'bolt', web: 'bolt' }}
+                      size={17}
+                    />
+                  </View>
+                  <View style={styles.plannerTextGroup}>
+                    <ThemedText type="smallBold">Payoff planner</ThemedText>
+                    <ThemedText type="small" themeColor="textSecondary">
+                      See how extra payments move your debt-free date.
+                    </ThemedText>
+                  </View>
+                  <SymbolView
+                    tintColor={theme.textSecondary}
+                    name={{ ios: 'chevron.right', android: 'chevron_right', web: 'chevron_right' }}
+                    size={16}
+                  />
+                </View>
+              </Pressable>
 
               <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
                 <ThemedText type="smallBold" style={styles.cardTitle}>
@@ -392,6 +421,25 @@ const styles = StyleSheet.create({
     borderRadius: Radii.card,
     padding: Spacing.three + 2,
     gap: Spacing.two + 2,
+  },
+  pressed: {
+    opacity: 0.7,
+  },
+  plannerCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two + 2,
+  },
+  plannerIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  plannerTextGroup: {
+    flex: 1,
+    gap: 1,
   },
   cardTitle: {
     fontSize: 15,

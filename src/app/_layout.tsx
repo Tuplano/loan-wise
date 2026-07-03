@@ -66,6 +66,7 @@ export default function RootLayout() {
             <Stack.Screen name="loan/[id]/index" options={{ title: 'Loan' }} />
             <Stack.Screen name="loan/[id]/edit" options={{ title: 'Edit Loan' }} />
             <Stack.Screen name="categories" options={{ title: 'Categories' }} />
+            <Stack.Screen name="payoff-planner" options={{ title: 'Payoff planner' }} />
           </Stack>
         </AppLockGate>
       )}

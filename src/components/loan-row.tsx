@@ -1,4 +1,5 @@
 import { SymbolView } from 'expo-symbols';
+import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
@@ -18,7 +19,9 @@ type LoanRowProps = {
   categoryName?: string | null;
   categoryColor?: string | null;
   principalCents: number;
-  paidCents: number;
+  totalPaidCents: number;
+  totalRemainingCents: number;
+  principalPaidCents: number;
   monthlyPaymentCents: number;
   nextDueDate: Date;
   status: LoanStatus;
@@ -39,7 +42,9 @@ export function LoanRow({
   categoryName,
   categoryColor,
   principalCents,
-  paidCents,
+  totalPaidCents,
+  totalRemainingCents,
+  principalPaidCents,
   monthlyPaymentCents,
   nextDueDate,
   status,
@@ -49,8 +54,9 @@ export function LoanRow({
 }: LoanRowProps) {
   const theme = useTheme();
   const { format } = useDisplayMoney();
-  const progress = principalCents > 0 ? paidCents / principalCents : 0;
-  const daysUntilDue = (nextDueDate.getTime() - Date.now()) / 86_400_000;
+  const progress = principalCents > 0 ? principalPaidCents / principalCents : 0;
+  const [renderedAt] = useState(() => Date.now());
+  const daysUntilDue = (nextDueDate.getTime() - renderedAt) / 86_400_000;
   const isOverdue = status === 'overdue';
   const isDueSoon = status === 'active' && daysUntilDue <= 5;
 
@@ -86,11 +92,13 @@ export function LoanRow({
 
           <View style={styles.amountRow}>
             <ThemedText type="subtitle" numeric>
-              {format(paidCents)}
+              {format(totalPaidCents)}
             </ThemedText>
-            <ThemedText type="small" themeColor="textSecondary" numeric>
-              of {format(principalCents)} paid
-            </ThemedText>
+            <View style={styles.amountMeta}>
+              <ThemedText type="small" themeColor="textSecondary" numeric>
+                {format(totalRemainingCents)} remaining
+              </ThemedText>
+            </View>
           </View>
 
           <ProgressBar progress={progress} />
@@ -155,6 +163,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'space-between',
+  },
+  amountMeta: {
+    alignItems: 'flex-end',
   },
   footer: {
     flexDirection: 'row',

@@ -14,6 +14,7 @@ import { BottomTabInset, MaxContentWidth, Radii, Spacing } from '@/constants/the
 import { db } from '@/db/client';
 import { loans } from '@/db/schema';
 import { useTheme } from '@/hooks/use-theme';
+import { buildLoanSummary } from '@/lib/loan-summary';
 import { isOpenStatus } from '@/lib/loan-status';
 import { cancelReminder } from '@/lib/notifications';
 
@@ -147,10 +148,11 @@ export default function LoansScreen() {
               </View>
             }
             renderItem={({ item, index }) => {
-              const principalPaid = item.transactions.reduce(
-                (paid, transaction) => paid + transaction.principalAppliedCents,
-                0
-              );
+              const summary = buildLoanSummary({
+                principalCents: item.principalCents,
+                payments: item.payments,
+                transactions: item.transactions,
+              });
 
               return (
                 <LoanRow
@@ -159,7 +161,9 @@ export default function LoansScreen() {
                   categoryName={item.category?.name}
                   categoryColor={item.category?.color}
                   principalCents={item.principalCents}
-                  paidCents={principalPaid}
+                  totalPaidCents={summary.totalPaidCents}
+                  totalRemainingCents={summary.totalRemainingCents}
+                  principalPaidCents={summary.principalPaidCents}
                   monthlyPaymentCents={item.monthlyPaymentCents}
                   nextDueDate={item.nextDueDate}
                   status={item.status}
