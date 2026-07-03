@@ -86,6 +86,9 @@ export type LoanBalanceLine = {
   name: string;
   color: string | null;
   points: BalancePoint[];
+  /** The loan's final scheduled installment date — its real end date, independent of any rounding
+   * in the balance curve above (which can asymptote to a few cents rather than exactly zero). */
+  endDate: Date;
 };
 
 /**
@@ -97,16 +100,22 @@ export function buildPerLoanBalanceTimelines(loans: LoanLike[], now: Date = new 
   const months = monthRange(loans, now);
   const currentMonth = startOfMonth(now);
 
-  return loans.map((loan) => ({
-    loanId: loan.id,
-    name: loan.name,
-    color: loan.category?.color ?? null,
-    points: months.map((month) => ({
-      month,
-      balanceCents: balanceAtMonth(loan, month, currentMonth),
-      projected: month.getTime() > currentMonth.getTime(),
-    })),
-  }));
+  return loans.map((loan) => {
+    const dueDates = loan.payments.map((payment) => payment.dueDate.getTime());
+    const endDate = dueDates.length > 0 ? new Date(Math.max(...dueDates)) : now;
+
+    return {
+      loanId: loan.id,
+      name: loan.name,
+      color: loan.category?.color ?? null,
+      endDate,
+      points: months.map((month) => ({
+        month,
+        balanceCents: balanceAtMonth(loan, month, currentMonth),
+        projected: month.getTime() > currentMonth.getTime(),
+      })),
+    };
+  });
 }
 
 /** The latest due date among unpaid installments of loans that aren't fully paid off, or null if debt-free. */

@@ -73,8 +73,8 @@ export function LockScreen({ onUnlock, onCancel }: LockScreenProps) {
           </Pressable>
         )}
         <View style={styles.header}>
-          <ThemedText type="title">Loan Wise</ThemedText>
-          <ThemedText type="small" themeColor="textSecondary">
+          <ThemedText type="display">Loan Wise</ThemedText>
+          <ThemedText type="default" themeColor="textSecondary">
             {error ? 'Incorrect PIN, try again' : 'Enter your PIN to unlock'}
           </ThemedText>
         </View>
@@ -89,7 +89,7 @@ export function LockScreen({ onUnlock, onCancel }: LockScreenProps) {
             <SymbolView
               tintColor={theme.text}
               name={{ ios: 'delete.left', android: 'backspace', web: 'backspace' }}
-              size={22}
+              size={28}
             />
           }
           leadingAccessory={
@@ -98,7 +98,7 @@ export function LockScreen({ onUnlock, onCancel }: LockScreenProps) {
                 <SymbolView
                   tintColor={theme.text}
                   name={{ ios: 'faceid', android: 'fingerprint', web: 'fingerprint' }}
-                  size={26}
+                  size={32}
                 />
               </Pressable>
             ) : undefined
@@ -119,11 +119,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.five,
-    paddingHorizontal: Spacing.four,
+    paddingHorizontal: Spacing.two,
   },
   header: {
     alignItems: 'center',
-    gap: Spacing.one,
+    gap: Spacing.two,
   },
   cancelButton: {
     position: 'absolute',

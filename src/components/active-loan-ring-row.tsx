@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { ThemedText } from './themed-text';
 
@@ -29,9 +29,7 @@ export function ActiveLoanRingRow({
   const { format } = useDisplayMoney();
 
   return (
-    <Animated.View
-      entering={FadeInDown.duration(280).delay(Math.min(index * 40, 200))}
-      style={styles.wrapper}>
+    <Animated.View entering={FadeIn.duration(280).delay(Math.min(index * 40, 200))} style={styles.wrapper}>
       <Pressable onPress={onPress} style={({ pressed }) => pressed && styles.pressed}>
         <View style={[styles.row, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <ProgressRing progress={progress} size={46} strokeWidth={5}>

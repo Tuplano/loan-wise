@@ -1,6 +1,6 @@
 import { SymbolView } from 'expo-symbols';
 import { Pressable, StyleSheet, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { ThemedText } from './themed-text';
 
@@ -55,7 +55,7 @@ export function LoanRow({
   const isDueSoon = status === 'active' && daysUntilDue <= 5;
 
   return (
-    <Animated.View entering={FadeInDown.duration(280).delay(Math.min(index * 40, 200))}>
+    <Animated.View entering={FadeIn.duration(280).delay(Math.min(index * 40, 200))}>
       <Pressable onPress={onPress} style={({ pressed }) => pressed && styles.pressed}>
         <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.border }]}>
           <View style={styles.topRow}>

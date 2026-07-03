@@ -1,5 +1,6 @@
 import * as Haptics from 'expo-haptics';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { type LayoutChangeEvent, Pressable, StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Radii, Spacing } from '@/constants/theme';
@@ -10,6 +11,10 @@ const KEYPAD_ROWS = [
   ['4', '5', '6'],
   ['7', '8', '9'],
 ];
+
+const KEY_GAP = Spacing.four + 8;
+const MIN_KEY_SIZE = 64;
+const MAX_KEY_SIZE = 92;
 
 type PinPadProps = {
   length: number;
@@ -24,9 +29,22 @@ type PinPadProps = {
 
 export function PinPad({ length, filled, error, onDigit, onBackspace, leadingAccessory, backspaceIcon }: PinPadProps) {
   const theme = useTheme();
+  const [containerWidth, setContainerWidth] = useState(0);
+
+  function handleLayout(event: LayoutChangeEvent) {
+    setContainerWidth(event.nativeEvent.layout.width);
+  }
+
+  // Keep the gap between keys fixed and let the key size adapt to whatever room is left,
+  // so the layout never looks cramped regardless of the device's screen width.
+  const keySize =
+    containerWidth > 0
+      ? Math.min(MAX_KEY_SIZE, Math.max(MIN_KEY_SIZE, (containerWidth - KEY_GAP * 2) / 3))
+      : MAX_KEY_SIZE;
+  const keyStyle = { width: keySize, height: keySize };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} onLayout={handleLayout}>
       <View style={styles.dotsRow}>
         {Array.from({ length }).map((_, index) => (
           <View
@@ -46,14 +64,14 @@ export function PinPad({ length, filled, error, onDigit, onBackspace, leadingAcc
         {KEYPAD_ROWS.map((row, rowIndex) => (
           <View key={rowIndex} style={styles.keypadRow}>
             {row.map((digit) => (
-              <KeypadButton key={digit} label={digit} onPress={() => onDigit(digit)} />
+              <KeypadButton key={digit} label={digit} onPress={() => onDigit(digit)} size={keySize} />
             ))}
           </View>
         ))}
         <View style={styles.keypadRow}>
-          <View style={styles.keypadKey}>{leadingAccessory}</View>
-          <KeypadButton label="0" onPress={() => onDigit('0')} />
-          <Pressable onPress={onBackspace} style={styles.keypadKey}>
+          <View style={[styles.keypadKey, keyStyle]}>{leadingAccessory}</View>
+          <KeypadButton label="0" onPress={() => onDigit('0')} size={keySize} />
+          <Pressable onPress={onBackspace} style={[styles.keypadKey, keyStyle]}>
             {backspaceIcon}
           </Pressable>
         </View>
@@ -62,7 +80,7 @@ export function PinPad({ length, filled, error, onDigit, onBackspace, leadingAcc
   );
 }
 
-function KeypadButton({ label, onPress }: { label: string; onPress: () => void }) {
+function KeypadButton({ label, onPress, size }: { label: string; onPress: () => void; size: number }) {
   const theme = useTheme();
   return (
     <Pressable
@@ -70,8 +88,14 @@ function KeypadButton({ label, onPress }: { label: string; onPress: () => void }
         Haptics.selectionAsync();
         onPress();
       }}
-      style={({ pressed }) => [styles.keypadKey, pressed && { backgroundColor: theme.backgroundElement }]}>
-      <ThemedText style={styles.keypadLabel}>{label}</ThemedText>
+      style={({ pressed }) => [
+        styles.keypadKey,
+        { width: size, height: size },
+        pressed && { backgroundColor: theme.backgroundElement },
+      ]}>
+      <ThemedText style={[styles.keypadLabel, { fontSize: size * 0.46, lineHeight: size * 0.5 }]}>
+        {label}
+      </ThemedText>
     </Pressable>
   );
 }
@@ -86,34 +110,30 @@ const styles = StyleSheet.create({
   dotsRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: Spacing.three,
+    gap: Spacing.three + 6,
   },
   dot: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 1.5,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
   },
   keypad: {
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.three,
+    gap: Spacing.four + 4,
   },
   keypadRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: Spacing.four,
+    gap: KEY_GAP,
   },
   keypadKey: {
-    width: 72,
-    height: 72,
     borderRadius: Radii.pill,
     alignItems: 'center',
     justifyContent: 'center',
   },
   keypadLabel: {
-    fontSize: 26,
-    lineHeight: 30,
     textAlign: 'center',
     includeFontPadding: false,
   },

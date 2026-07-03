@@ -84,8 +84,10 @@ export function PinSetupModal({ visible, onComplete, onCancel }: PinSetupModalPr
 
         <View style={styles.body}>
           <View style={styles.header}>
-            <ThemedText type="subtitle">{stage === 'enter' ? 'Set a PIN' : 'Confirm your PIN'}</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary">
+            <ThemedText type="display" style={styles.title}>
+              {stage === 'enter' ? 'Set a PIN' : 'Confirm your PIN'}
+            </ThemedText>
+            <ThemedText type="default" themeColor="textSecondary">
               {error
                 ? "PINs didn't match, try again"
                 : stage === 'enter'
@@ -104,7 +106,7 @@ export function PinSetupModal({ visible, onComplete, onCancel }: PinSetupModalPr
               <SymbolView
                 tintColor={theme.text}
                 name={{ ios: 'delete.left', android: 'backspace', web: 'backspace' }}
-                size={22}
+                size={28}
               />
             }
           />
@@ -128,10 +130,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.five,
-    paddingHorizontal: Spacing.four,
+    paddingHorizontal: Spacing.two,
   },
   header: {
     alignItems: 'center',
-    gap: Spacing.one,
+    gap: Spacing.two,
+  },
+  title: {
+    fontSize: 30,
+    lineHeight: 34,
   },
 });

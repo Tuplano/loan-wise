@@ -7,7 +7,6 @@ import Svg, { Path } from 'react-native-svg';
 import { ThemedText } from '@/components/themed-text';
 import { Spacing } from '@/constants/theme';
 import { categoryColors } from '@/db/seed';
-import { formatDate } from '@/lib/date';
 
 import type { LoanBalanceLine } from '@/lib/analytics';
 
@@ -22,10 +21,8 @@ function monthTick(date: Date) {
   return date.toLocaleDateString('en-PH', { month: 'short', year: '2-digit' });
 }
 
-/** The first month a loan's balance reaches zero, or null if it's still open at the end of the timeline. */
-function payoffMonth(line: LoanBalanceLine): Date | null {
-  const zeroPoint = line.points.find((point) => point.balanceCents <= 0);
-  return zeroPoint ? zeroPoint.month : null;
+function fullDate(date: Date) {
+  return date.toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 type Coord = { x: number; y: number };
@@ -133,14 +130,13 @@ export function BalanceChart({ lines }: BalanceChartProps) {
       <View style={styles.legend}>
         {lines.map((line, index) => {
           const color = line.color ?? categoryColors[index % categoryColors.length];
-          const payoff = payoffMonth(line);
           const hidden = hiddenLoanIds.has(line.loanId);
           return (
             <LegendRow
               key={line.loanId}
               label={line.name}
               color={color}
-              payoffLabel={payoff ? `ends ${formatDate(payoff)}` : 'ongoing'}
+              payoffLabel={`ends ${fullDate(line.endDate)}`}
               hidden={hidden}
               onPress={() => toggleLoan(line.loanId)}
             />

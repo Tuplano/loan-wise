@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { SymbolView } from 'expo-symbols';
 import { useMemo } from 'react';
 import { Pressable, SectionList, StyleSheet, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -138,7 +138,7 @@ export default function PaymentsScreen() {
               </ThemedText>
             )}
             renderItem={({ item, index }) => (
-              <Animated.View entering={FadeInDown.duration(280).delay(Math.min(index * 30, 180))}>
+              <Animated.View entering={FadeIn.duration(280).delay(Math.min(index * 30, 180))}>
                 <Pressable
                   onPress={() => router.push(`/loan/${item.loanId}`)}
                   style={({ pressed }) => pressed && styles.pressed}>
