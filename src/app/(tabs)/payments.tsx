@@ -15,17 +15,20 @@ import { useDisplayMoney } from '@/hooks/use-display-money';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDate } from '@/lib/date';
 import { isOpenStatus } from '@/lib/loan-status';
-import { getScheduleForLoan } from '@/lib/schedule';
-import { isSameMonth, monthLabel, sumPaymentsInMonth } from '@/lib/stats';
+import { remainingDueCents } from '@/lib/schedule';
+import { isSameMonth, monthLabel, sumTransactionsInMonth } from '@/lib/stats';
 
 type PaymentEntry = {
   key: string;
   loanId: number;
   loanName: string;
+  kind: 'installment' | 'extra';
   paidAt: Date;
   amountCents: number;
-  principalPortionCents: number;
-  interestPortionCents: number;
+  principalAppliedCents: number;
+  interestAppliedCents: number;
+  /** Installment transactions only: the full amount of the month it went toward. */
+  installmentAmountCents: number | null;
   onTime: boolean;
   daysLate: number;
   note: string | null;
@@ -38,40 +41,64 @@ export default function PaymentsScreen() {
 
   const { data: loanList } = useLiveQuery(
     db.query.loans.findMany({
-      with: { payments: { orderBy: (fields, { asc }) => [asc(fields.installmentNumber)] } },
+      with: {
+        payments: { orderBy: (fields, { asc }) => [asc(fields.installmentNumber)] },
+        transactions: true,
+      },
     })
   );
 
-  const allPayments = useMemo(() => loanList.flatMap((loan) => loan.payments), [loanList]);
+  const allTransactions = useMemo(() => loanList.flatMap((loan) => loan.transactions), [loanList]);
   const activeLoans = loanList.filter((loan) => isOpenStatus(loan.status));
-  const paidThisMonthCents = sumPaymentsInMonth(allPayments);
+  const paidThisMonthCents = sumTransactionsInMonth(allTransactions);
   const now = new Date();
   const paymentsDueThisMonth = activeLoans.flatMap((loan) =>
     loan.payments.filter((payment) => isSameMonth(payment.dueDate, now))
   );
   const madeThisMonth = paymentsDueThisMonth.filter((payment) => payment.isPaid);
-  const remainingCents = paymentsDueThisMonth
-    .filter((payment) => !payment.isPaid)
-    .reduce((sum, payment) => sum + payment.amountCents, 0);
+  const remainingCents = paymentsDueThisMonth.reduce(
+    (sum, payment) => sum + remainingDueCents(payment),
+    0
+  );
+  const dueThisMonthCents = paymentsDueThisMonth.reduce(
+    (sum, payment) => sum + payment.amountCents,
+    0
+  );
   const monthProgress =
-    paymentsDueThisMonth.length > 0 ? madeThisMonth.length / paymentsDueThisMonth.length : 0;
+    dueThisMonthCents > 0 ? (dueThisMonthCents - remainingCents) / dueThisMonthCents : 0;
 
   const sections = useMemo(() => {
     const entries: PaymentEntry[] = loanList.flatMap((loan) =>
-      getScheduleForLoan(loan.payments)
-        .filter((entry) => entry.paid)
-        .map((entry) => ({
-          key: `${loan.id}-${entry.payment.id}`,
+      loan.transactions.map((transaction) => {
+        const row = transaction.paymentId
+          ? loan.payments.find((payment) => payment.id === transaction.paymentId)
+          : undefined;
+        const daysLate =
+          row && transaction.kind === 'installment'
+            ? Math.max(
+                0,
+                Math.round(
+                  (transaction.paidAt.getTime() - row.dueDate.getTime()) / 86_400_000
+                )
+              )
+            : 0;
+
+        return {
+          key: `tx-${transaction.id}`,
           loanId: loan.id,
           loanName: loan.name,
-          paidAt: entry.payment.paidAt!,
-          amountCents: entry.payment.amountCents,
-          principalPortionCents: entry.payment.principalPortionCents,
-          interestPortionCents: entry.payment.interestPortionCents,
-          onTime: entry.onTime,
-          daysLate: entry.daysLate,
-          note: entry.payment.note,
-        }))
+          kind: transaction.kind,
+          paidAt: transaction.paidAt,
+          amountCents: transaction.amountCents,
+          principalAppliedCents: transaction.principalAppliedCents,
+          interestAppliedCents: transaction.interestAppliedCents,
+          installmentAmountCents:
+            row && transaction.kind === 'installment' ? row.amountCents : null,
+          onTime: daysLate === 0,
+          daysLate,
+          note: transaction.note,
+        };
+      })
     );
     entries.sort((a, b) => b.paidAt.getTime() - a.paidAt.getTime());
 
@@ -154,9 +181,11 @@ export default function PaymentsScreen() {
                       <SymbolView
                         tintColor={item.onTime ? theme.primary : theme.danger}
                         name={
-                          item.onTime
-                            ? { ios: 'checkmark', android: 'check', web: 'check' }
-                            : { ios: 'clock', android: 'schedule', web: 'schedule' }
+                          item.kind === 'extra'
+                            ? { ios: 'plus', android: 'add', web: 'add' }
+                            : item.onTime
+                              ? { ios: 'checkmark', android: 'check', web: 'check' }
+                              : { ios: 'clock', android: 'schedule', web: 'schedule' }
                         }
                         size={15}
                       />
@@ -166,9 +195,14 @@ export default function PaymentsScreen() {
                         {item.loanName}
                       </ThemedText>
                       <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
-                        {item.onTime
-                          ? `${formatDate(item.paidAt)} · ${format(item.principalPortionCents)} principal + ${format(item.interestPortionCents)} int`
-                          : `${formatDate(item.paidAt)} · ${item.daysLate} day${item.daysLate === 1 ? '' : 's'} late`}
+                        {item.kind === 'extra'
+                          ? `${formatDate(item.paidAt)} · Extra payment → principal`
+                          : item.installmentAmountCents !== null &&
+                              item.amountCents < item.installmentAmountCents
+                            ? `${formatDate(item.paidAt)} · Partial · ${format(item.amountCents)} of ${format(item.installmentAmountCents)}`
+                            : item.onTime
+                              ? `${formatDate(item.paidAt)} · ${format(item.principalAppliedCents)} principal + ${format(item.interestAppliedCents)} int`
+                              : `${formatDate(item.paidAt)} · ${item.daysLate} day${item.daysLate === 1 ? '' : 's'} late`}
                       </ThemedText>
                       {item.note && (
                         <ThemedText type="small" themeColor="textMuted" numberOfLines={1}>

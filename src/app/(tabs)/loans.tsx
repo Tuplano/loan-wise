@@ -28,7 +28,7 @@ export default function LoansScreen() {
 
   const { data: loanList } = useLiveQuery(
     db.query.loans.findMany({
-      with: { category: true, reminders: true, payments: true },
+      with: { category: true, reminders: true, payments: true, transactions: true },
       orderBy: (fields, { asc }) => [asc(fields.nextDueDate)],
     })
   );
@@ -147,8 +147,8 @@ export default function LoansScreen() {
               </View>
             }
             renderItem={({ item, index }) => {
-              const principalPaid = item.payments.reduce(
-                (paid, payment) => paid + (payment.isPaid ? payment.principalPortionCents : 0),
+              const principalPaid = item.transactions.reduce(
+                (paid, transaction) => paid + transaction.principalAppliedCents,
                 0
               );
 

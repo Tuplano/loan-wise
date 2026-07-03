@@ -19,6 +19,18 @@ export function sumPaymentsInMonth<T extends { isPaid: boolean; paidAt: Date | n
   );
 }
 
+/** Money actually paid in `month`, summed from transactions — unlike sumPaymentsInMonth,
+ * this counts partial payments and extras in the month they happened. */
+export function sumTransactionsInMonth<T extends { paidAt: Date; amountCents: number }>(
+  transactions: T[],
+  month: Date = new Date()
+) {
+  return transactions.reduce(
+    (sum, transaction) => (isSameMonth(transaction.paidAt, month) ? sum + transaction.amountCents : sum),
+    0
+  );
+}
+
 export function monthLabel(date: Date) {
   return date.toLocaleDateString('en-PH', { year: 'numeric', month: 'long' });
 }

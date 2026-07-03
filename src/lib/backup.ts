@@ -8,9 +8,11 @@ import {
   categories,
   loans,
   payments,
+  paymentTransactions,
   reminders,
   type AppearanceMode,
   type LoanStatus,
+  type TransactionKind,
 } from '@/db/schema';
 import type { CurrencyCode } from '@/lib/currency';
 import { convertCentsSync } from '@/lib/exchange-rates';
@@ -18,7 +20,7 @@ import { formatMoney } from '@/lib/format';
 import { refreshAllLoanStatuses } from '@/lib/loan-status';
 import { cancelAllScheduledNotifications, scheduleLoanReminder } from '@/lib/notifications';
 
-export const BACKUP_SCHEMA_VERSION = 1;
+export const BACKUP_SCHEMA_VERSION = 2;
 
 type SettingsExport = {
   displayName: string;
@@ -58,8 +60,22 @@ type PaymentExport = {
   amountCents: number;
   principalPortionCents: number;
   interestPortionCents: number;
+  paidCents: number;
   isPaid: boolean;
   paidAt: number | null;
+  note: string | null;
+  createdAt: number;
+};
+
+type TransactionExport = {
+  id: number;
+  loanId: number;
+  paymentId: number | null;
+  kind: TransactionKind;
+  amountCents: number;
+  principalAppliedCents: number;
+  interestAppliedCents: number;
+  paidAt: number;
   note: string | null;
   createdAt: number;
 };
@@ -72,15 +88,16 @@ type ReminderExport = {
   createdAt: number;
 };
 
-export type BackupFileV1 = {
+export type BackupFileV2 = {
   app: 'loan-wise';
-  schemaVersion: 1;
+  schemaVersion: 2;
   exportedAt: string;
   data: {
     settings: SettingsExport | null;
     categories: CategoryExport[];
     loans: LoanExport[];
     payments: PaymentExport[];
+    paymentTransactions: TransactionExport[];
     reminders: ReminderExport[];
   };
 };
@@ -105,11 +122,12 @@ function writeAndShare(fileName: string, content: string, mimeType: string, uti:
   return Sharing.shareAsync(file.uri, { mimeType, UTI: uti });
 }
 
-async function buildBackup(): Promise<BackupFileV1> {
+async function buildBackup(): Promise<BackupFileV2> {
   const [settingsRow] = await db.select().from(appSettings).limit(1);
   const categoryRows = await db.select().from(categories);
   const loanRows = await db.select().from(loans);
   const paymentRows = await db.select().from(payments);
+  const transactionRows = await db.select().from(paymentTransactions);
   const reminderRows = await db.select().from(reminders);
 
   return {
@@ -159,8 +177,21 @@ async function buildBackup(): Promise<BackupFileV1> {
         amountCents: row.amountCents,
         principalPortionCents: row.principalPortionCents,
         interestPortionCents: row.interestPortionCents,
+        paidCents: row.paidCents,
         isPaid: row.isPaid,
         paidAt: row.paidAt ? row.paidAt.getTime() : null,
+        note: row.note,
+        createdAt: row.createdAt.getTime(),
+      })),
+      paymentTransactions: transactionRows.map((row) => ({
+        id: row.id,
+        loanId: row.loanId,
+        paymentId: row.paymentId,
+        kind: row.kind,
+        amountCents: row.amountCents,
+        principalAppliedCents: row.principalAppliedCents,
+        interestAppliedCents: row.interestAppliedCents,
+        paidAt: row.paidAt.getTime(),
         note: row.note,
         createdAt: row.createdAt.getTime(),
       })),
@@ -190,9 +221,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-export type BackupValidationResult = { ok: true; data: BackupFileV1 } | { ok: false; error: string };
+export type BackupValidationResult = { ok: true; data: BackupFileV2 } | { ok: false; error: string };
 
-/** Validates a parsed backup file's shape and referential integrity before anything touches the database. */
+/** Validates a parsed backup file's shape and referential integrity before anything touches the
+ * database. v1 backups are accepted and upconverted in place — each paid installment becomes one
+ * full-amount transaction (the exact mapping the 0006 migration applies to live data) — so
+ * importBackup only ever sees the v2 shape. */
 export function validateBackup(raw: unknown): BackupValidationResult {
   if (!isRecord(raw)) return { ok: false, error: 'File is not a valid backup (not a JSON object).' };
   if (raw.app !== 'loan-wise') return { ok: false, error: 'File is not a Loan Wise backup.' };
@@ -246,6 +280,9 @@ export function validateBackup(raw: unknown): BackupValidationResult {
     loanIds.add(loan.id);
   }
 
+  const isV1 = raw.schemaVersion === 1;
+
+  const paymentIds = new Set<number>();
   const seenInstallments = new Set<string>();
   for (const payment of paymentsRaw) {
     if (
@@ -261,6 +298,11 @@ export function validateBackup(raw: unknown): BackupValidationResult {
     ) {
       return { ok: false, error: 'A payment entry is malformed.' };
     }
+    if (isV1) {
+      payment.paidCents = payment.isPaid ? payment.amountCents : 0;
+    } else if (typeof payment.paidCents !== 'number' || payment.paidCents < 0) {
+      return { ok: false, error: 'A payment entry is malformed.' };
+    }
     if (!loanIds.has(payment.loanId)) {
       return { ok: false, error: 'A payment references a loan that does not exist in the backup.' };
     }
@@ -269,6 +311,55 @@ export function validateBackup(raw: unknown): BackupValidationResult {
       return { ok: false, error: 'Backup contains duplicate installments for a loan.' };
     }
     seenInstallments.add(key);
+    paymentIds.add(payment.id);
+  }
+
+  if (isV1) {
+    let nextTransactionId = 1;
+    raw.data.paymentTransactions = paymentsRaw
+      .filter((payment) => payment.isPaid)
+      .map((payment) => ({
+        id: nextTransactionId++,
+        loanId: payment.loanId as number,
+        paymentId: payment.id as number,
+        kind: 'installment' as const,
+        amountCents: payment.amountCents as number,
+        principalAppliedCents: payment.principalPortionCents as number,
+        interestAppliedCents: payment.interestPortionCents as number,
+        paidAt: (payment.paidAt ?? payment.dueDate) as number,
+        note: (payment.note ?? null) as string | null,
+        createdAt: (payment.createdAt ?? payment.dueDate) as number,
+      }));
+    raw.schemaVersion = 2;
+  } else {
+    const transactionsRaw = raw.data.paymentTransactions;
+    if (!Array.isArray(transactionsRaw)) {
+      return { ok: false, error: 'Backup data is malformed.' };
+    }
+    for (const transaction of transactionsRaw) {
+      if (
+        !isRecord(transaction) ||
+        typeof transaction.id !== 'number' ||
+        typeof transaction.loanId !== 'number' ||
+        (transaction.paymentId !== null && typeof transaction.paymentId !== 'number') ||
+        (transaction.kind !== 'installment' && transaction.kind !== 'extra') ||
+        typeof transaction.amountCents !== 'number' ||
+        transaction.amountCents < 0 ||
+        typeof transaction.principalAppliedCents !== 'number' ||
+        transaction.principalAppliedCents < 0 ||
+        typeof transaction.interestAppliedCents !== 'number' ||
+        transaction.interestAppliedCents < 0 ||
+        typeof transaction.paidAt !== 'number'
+      ) {
+        return { ok: false, error: 'A payment transaction entry is malformed.' };
+      }
+      if (!loanIds.has(transaction.loanId)) {
+        return { ok: false, error: 'A transaction references a loan that does not exist in the backup.' };
+      }
+      if (transaction.paymentId !== null && !paymentIds.has(transaction.paymentId)) {
+        return { ok: false, error: 'A transaction references a payment that does not exist in the backup.' };
+      }
+    }
   }
 
   for (const reminder of remindersRaw) {
@@ -284,12 +375,12 @@ export function validateBackup(raw: unknown): BackupValidationResult {
     return { ok: false, error: 'Backup settings are malformed.' };
   }
 
-  return { ok: true, data: raw as BackupFileV1 };
+  return { ok: true, data: raw as unknown as BackupFileV2 };
 }
 
 /** Wipes every table and restores it from the backup, preserving original ids. Notifications are
  * cancelled up front (their ids die with the wipe) and reminders are rescheduled afterward. */
-export async function importBackup(backup: BackupFileV1): Promise<void> {
+export async function importBackup(backup: BackupFileV2): Promise<void> {
   await cancelAllScheduledNotifications();
 
   // App lock is tied to this device's SecureStore PIN, not the backup's origin device —
@@ -299,6 +390,7 @@ export async function importBackup(backup: BackupFileV1): Promise<void> {
 
   db.transaction((tx) => {
     tx.delete(reminders).run();
+    tx.delete(paymentTransactions).run();
     tx.delete(payments).run();
     tx.delete(loans).run();
     tx.delete(categories).run();
@@ -352,10 +444,30 @@ export async function importBackup(backup: BackupFileV1): Promise<void> {
             amountCents: payment.amountCents,
             principalPortionCents: payment.principalPortionCents,
             interestPortionCents: payment.interestPortionCents,
+            paidCents: payment.paidCents,
             isPaid: payment.isPaid,
             paidAt: payment.paidAt !== null ? new Date(payment.paidAt) : null,
             note: payment.note,
             createdAt: new Date(payment.createdAt),
+          }))
+        )
+        .run();
+    }
+
+    if (backup.data.paymentTransactions.length > 0) {
+      tx.insert(paymentTransactions)
+        .values(
+          backup.data.paymentTransactions.map((transaction) => ({
+            id: transaction.id,
+            loanId: transaction.loanId,
+            paymentId: transaction.paymentId,
+            kind: transaction.kind,
+            amountCents: transaction.amountCents,
+            principalAppliedCents: transaction.principalAppliedCents,
+            interestAppliedCents: transaction.interestAppliedCents,
+            paidAt: new Date(transaction.paidAt),
+            note: transaction.note,
+            createdAt: new Date(transaction.createdAt),
           }))
         )
         .run();
@@ -418,7 +530,9 @@ function csvEscape(value: string): string {
 }
 
 export async function exportPaymentsCsv(): Promise<void> {
-  const loanRows = await db.query.loans.findMany({ with: { payments: true, category: true } });
+  const loanRows = await db.query.loans.findMany({
+    with: { payments: true, transactions: true, category: true },
+  });
 
   const header = [
     'loan',
@@ -429,6 +543,8 @@ export async function exportPaymentsCsv(): Promise<void> {
     'amount',
     'principal',
     'interest',
+    'paid_amount',
+    'remaining',
     'status',
     'paid_at',
     'note',
@@ -446,9 +562,32 @@ export async function exportPaymentsCsv(): Promise<void> {
         (payment.amountCents / 100).toFixed(2),
         (payment.principalPortionCents / 100).toFixed(2),
         (payment.interestPortionCents / 100).toFixed(2),
-        payment.isPaid ? 'paid' : 'unpaid',
+        (payment.paidCents / 100).toFixed(2),
+        (Math.max(payment.amountCents - payment.paidCents, 0) / 100).toFixed(2),
+        payment.isPaid ? 'paid' : payment.paidCents > 0 ? 'partial' : 'unpaid',
         payment.paidAt ? payment.paidAt.toISOString().slice(0, 10) : '',
         payment.note ?? '',
+      ].map(csvEscape);
+      lines.push(row.join(','));
+    }
+
+    // Standalone extra payments have no schedule row — emit them as their own lines.
+    for (const transaction of loan.transactions) {
+      if (transaction.kind !== 'extra' || transaction.paymentId !== null) continue;
+      const row = [
+        loan.name,
+        loan.lender ?? '',
+        loan.category?.name ?? '',
+        'extra',
+        '',
+        (transaction.amountCents / 100).toFixed(2),
+        (transaction.principalAppliedCents / 100).toFixed(2),
+        (transaction.interestAppliedCents / 100).toFixed(2),
+        (transaction.amountCents / 100).toFixed(2),
+        '0.00',
+        'paid',
+        transaction.paidAt.toISOString().slice(0, 10),
+        transaction.note ?? '',
       ].map(csvEscape);
       lines.push(row.join(','));
     }

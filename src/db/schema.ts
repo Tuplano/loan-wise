@@ -5,6 +5,7 @@ import type { CurrencyCode } from '@/lib/currency';
 
 export type LoanStatus = 'active' | 'paid_off' | 'overdue';
 export type AppearanceMode = 'system' | 'light' | 'dark';
+export type TransactionKind = 'installment' | 'extra';
 
 export const categories = sqliteTable('categories', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -61,6 +62,10 @@ export const payments = sqliteTable('payments', {
   principalPortionCents: integer('principal_portion_cents').notNull(),
   interestPortionCents: integer('interest_portion_cents').notNull(),
 
+  // Rollup of money applied to this installment so far (see payment_transactions).
+  // isPaid stays the source of truth for "settled": paidCents >= amountCents.
+  paidCents: integer('paid_cents').notNull().default(0),
+
   isPaid: integer('is_paid', { mode: 'boolean' }).notNull().default(false),
   paidAt: integer('paid_at', { mode: 'timestamp' }),
   note: text('note'),
@@ -71,6 +76,33 @@ export const payments = sqliteTable('payments', {
 }, (table) => [
   uniqueIndex('payments_loan_installment_idx').on(table.loanId, table.installmentNumber),
 ]);
+
+// Source of truth for money-in events. An installment row's paidCents/isPaid is a
+// denormalized rollup of its transactions. An overpayment is stored as two rows:
+// an 'installment' transaction for the remaining due plus an 'extra' transaction
+// (all principal) for the overflow, sharing the same paymentId so undo reverses both.
+// Standalone extra payments have paymentId = null.
+export const paymentTransactions = sqliteTable('payment_transactions', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  loanId: integer('loan_id')
+    .notNull()
+    .references(() => loans.id, { onDelete: 'cascade' }),
+  // 'set null' (not cascade): schedule-tail regeneration deletes unpaid rows, and the
+  // money history must survive that.
+  paymentId: integer('payment_id').references(() => payments.id, { onDelete: 'set null' }),
+
+  kind: text('kind').$type<TransactionKind>().notNull().default('installment'),
+  amountCents: integer('amount_cents').notNull(),
+  principalAppliedCents: integer('principal_applied_cents').notNull(),
+  interestAppliedCents: integer('interest_applied_cents').notNull(),
+
+  paidAt: integer('paid_at', { mode: 'timestamp' }).notNull(),
+  note: text('note'),
+
+  createdAt: integer('created_at', { mode: 'timestamp' })
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
 
 export const reminders = sqliteTable('reminders', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -110,12 +142,25 @@ export const loansRelations = relations(loans, ({ one, many }) => ({
   }),
   payments: many(payments),
   reminders: many(reminders),
+  transactions: many(paymentTransactions),
 }));
 
-export const paymentsRelations = relations(payments, ({ one }) => ({
+export const paymentsRelations = relations(payments, ({ one, many }) => ({
   loan: one(loans, {
     fields: [payments.loanId],
     references: [loans.id],
+  }),
+  transactions: many(paymentTransactions),
+}));
+
+export const paymentTransactionsRelations = relations(paymentTransactions, ({ one }) => ({
+  loan: one(loans, {
+    fields: [paymentTransactions.loanId],
+    references: [loans.id],
+  }),
+  payment: one(payments, {
+    fields: [paymentTransactions.paymentId],
+    references: [payments.id],
   }),
 }));
 

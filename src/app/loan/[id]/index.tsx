@@ -12,6 +12,8 @@ import { PaymentNoteModal } from '@/components/payment-note-modal';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { PillBadge } from '@/components/ui/pill-badge';
+import { PrimaryButton } from '@/components/ui/primary-button';
+import { ProgressBar } from '@/components/ui/progress-bar';
 import { ProgressRing } from '@/components/ui/progress-ring';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { db } from '@/db/client';
@@ -21,9 +23,14 @@ import { useTheme } from '@/hooks/use-theme';
 import { formatDate, ordinalSuffix } from '@/lib/date';
 import { convertCentsSync } from '@/lib/exchange-rates';
 import { formatMoney } from '@/lib/format';
-import { deriveLoanStatus } from '@/lib/loan-status';
 import { cancelReminder, scheduleLoanReminder } from '@/lib/notifications';
-import { computeNextDueDate, getScheduleForLoan, scheduleAnchor } from '@/lib/schedule';
+import {
+  applyExtraPayment,
+  applyInstallmentPayment,
+  sumExtraPrincipal,
+  undoInstallmentPayments,
+} from '@/lib/payment-actions';
+import { extraPaymentCapacityCents, getScheduleForLoan, remainingDueCents, scheduleAnchor } from '@/lib/schedule';
 
 const statusLabel: Record<LoanStatus, string> = {
   active: 'Active',
@@ -37,9 +44,11 @@ export default function LoanDetailScreen() {
   const theme = useTheme();
   const { format, currency } = useDisplayMoney();
   const router = useRouter();
-  const [processingId, setProcessingId] = useState<number | null>(null);
+  const [processing, setProcessing] = useState(false);
   const [notePaymentId, setNotePaymentId] = useState<number | null>(null);
-  const [pendingPaymentId, setPendingPaymentId] = useState<number | null>(null);
+  const [modalState, setModalState] = useState<
+    { mode: 'installment'; paymentId: number } | { mode: 'extra' } | null
+  >(null);
 
   const { data: loanResult } = useLiveQuery(
     db.query.loans.findFirst({
@@ -48,6 +57,7 @@ export default function LoanDetailScreen() {
         category: true,
         payments: { orderBy: (fields, { asc }) => [asc(fields.installmentNumber)] },
         reminders: true,
+        transactions: true,
       },
     })
   );
@@ -68,32 +78,38 @@ export default function LoanDetailScreen() {
 
   const schedule = getScheduleForLoan(loan.payments);
 
-  const principalPaidCents = loan.payments.reduce(
-    (sum, payment) => sum + (payment.isPaid ? payment.principalPortionCents : 0),
+  const principalPaidCents = loan.transactions.reduce(
+    (sum, transaction) => sum + transaction.principalAppliedCents,
     0
   );
-  const remainingCents = Math.max(loan.principalCents - principalPaidCents, 0);
   const paidOffProgress =
     loan.principalCents > 0 ? Math.min(principalPaidCents / loan.principalCents, 1) : 0;
+
+  const extraPrincipalCents = sumExtraPrincipal(loan.transactions);
+  const extraCapacityCents = extraPaymentCapacityCents(loan, loan.payments, extraPrincipalCents);
 
   const basePaymentCents = Math.round(loan.principalCents / loan.termMonths);
   const interestPaymentCents = loan.monthlyPaymentCents - basePaymentCents;
 
-  async function rescheduleReminder(newDueDate: Date | null) {
-    if (!reminder || !reminder.enabled) return;
-
-    await cancelReminder(reminder.notificationId);
-    const notificationId = newDueDate
-      ? await scheduleLoanReminder({
-          loanName: loan.name,
-          amountLabel: formatMoney(convertCentsSync(loan.monthlyPaymentCents, currency), currency),
-          dueDate: newDueDate,
-          daysBefore: reminder.daysBefore,
-        })
-      : null;
-
-    await db.update(reminders).set({ notificationId }).where(eq(reminders.id, reminder.id));
-  }
+  const modalRow =
+    modalState?.mode === 'installment'
+      ? loan.payments.find((payment) => payment.id === modalState.paymentId)
+      : undefined;
+  const modalRemainingCents = modalRow ? remainingDueCents(modalRow) : 0;
+  // In installment mode the cap is the row's remainder plus whatever the tail can still
+  // absorb once this row is locked; in extra mode it's just the tail's capacity.
+  const modalMaxCents = modalRow
+    ? modalRemainingCents +
+      extraPaymentCapacityCents(
+        loan,
+        loan.payments.map((payment) =>
+          payment.id === modalRow.id
+            ? { ...payment, paidCents: Math.max(payment.paidCents, 1) }
+            : payment
+        ),
+        extraPrincipalCents
+      )
+    : extraCapacityCents;
 
   async function handleToggleReminder() {
     if (reminder) {
@@ -135,42 +151,49 @@ export default function LoanDetailScreen() {
     });
   }
 
-  async function handleToggleInstallment(payment: (typeof loan.payments)[number], paidAt: Date | null) {
-    if (processingId !== null) return;
-    setProcessingId(payment.id);
+  async function handleConfirmPayment(amountCents: number, paidAt: Date) {
+    if (processing) return;
+    setProcessing(true);
 
     try {
-      const now = new Date();
-      const nextIsPaid = paidAt !== null;
-
-      await db
-        .update(payments)
-        .set({ isPaid: nextIsPaid, paidAt })
-        .where(eq(payments.id, payment.id));
-
-      const updatedRows = loan.payments.map((row) =>
-        row.id === payment.id ? { ...row, isPaid: nextIsPaid, paidAt } : row
-      );
-      const nextStatus = deriveLoanStatus(updatedRows);
-      const isFullyPaid = nextStatus === 'paid_off';
-      const newDueDate = computeNextDueDate(updatedRows);
-
-      await db
-        .update(loans)
-        .set({
-          nextDueDate: newDueDate,
-          status: nextStatus,
-          updatedAt: now,
-        })
-        .where(eq(loans.id, loan.id));
-
-      await rescheduleReminder(isFullyPaid ? null : newDueDate);
-      Haptics.notificationAsync(
-        nextIsPaid ? Haptics.NotificationFeedbackType.Success : Haptics.NotificationFeedbackType.Warning
-      );
+      if (modalState?.mode === 'installment') {
+        await applyInstallmentPayment({
+          loanId: loan.id,
+          paymentId: modalState.paymentId,
+          amountCents,
+          paidAt,
+        });
+      } else {
+        await applyExtraPayment({ loanId: loan.id, amountCents, paidAt });
+      }
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } finally {
-      setProcessingId(null);
+      setProcessing(false);
     }
+  }
+
+  function handleUndo(paymentId: number) {
+    Alert.alert(
+      'Undo payments',
+      'Remove every payment logged for this month? The schedule will regrow if extra principal was applied.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Undo',
+          style: 'destructive',
+          onPress: async () => {
+            if (processing) return;
+            setProcessing(true);
+            try {
+              await undoInstallmentPayments(paymentId);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            } finally {
+              setProcessing(false);
+            }
+          },
+        },
+      ]
+    );
   }
 
   async function handleSaveNote(paymentId: number, note: string | null) {
@@ -303,9 +326,17 @@ export default function LoanDetailScreen() {
 
                 <View style={styles.miniStatsRow}>
                   <MiniStat value={`${loan.termMonths} mo`} label="Term" />
-                  <MiniStat value={`${Math.max(loan.termMonths - paidCount, 0)} mo`} label="Left" />
+                  <MiniStat value={`${Math.max(loan.payments.length - paidCount, 0)} mo`} label="Left" />
                   <MiniStat value={`${loan.interestRate}%`} label="Interest" />
                 </View>
+
+                {loan.status !== 'paid_off' && extraCapacityCents > 0 && (
+                  <PrimaryButton
+                    label="Log extra payment"
+                    onPress={() => setModalState({ mode: 'extra' })}
+                    disabled={processing}
+                  />
+                )}
 
                 {loan.notes && (
                   <View style={[styles.notesBox, { backgroundColor: theme.backgroundElement }]}>
@@ -314,40 +345,50 @@ export default function LoanDetailScreen() {
                 )}
 
                 <ThemedText type="smallBold" style={styles.scheduleLabel}>
-                  Payment schedule ({paidCount}/{loan.termMonths} paid)
+                  Payment schedule ({paidCount}/{loan.payments.length} paid)
                 </ThemedText>
                 <ThemedText type="small" themeColor="textSecondary">
-                  Tap any month to mark it paid or undo it — in any order.
+                  Tap any month to log a payment — full, partial, or more. Tap a paid month to
+                  undo it.
                 </ThemedText>
               </View>
             }
             renderItem={({ item }) => {
-              const isProcessing = processingId === item.payment.id;
               const subtitle = item.paid
                 ? `Paid ${formatDate(item.payment.paidAt!)}`
-                : `Due ${formatDate(item.dueDate)}`;
+                : item.partial
+                  ? `${format(item.paidCents)} of ${format(item.amountCents)} paid · due ${formatDate(item.dueDate)}`
+                  : `Due ${formatDate(item.dueDate)}`;
               const trailingNote = item.paid
                 ? item.onTime
                   ? 'On time'
                   : `${item.daysLate}d late`
-                : item.dueDate.getTime() < Date.now()
-                  ? 'Overdue'
-                  : 'Upcoming';
+                : item.partial
+                  ? 'Partial'
+                  : item.dueDate.getTime() < Date.now()
+                    ? 'Overdue'
+                    : 'Upcoming';
 
               return (
                 <Pressable
                   onPress={() =>
                     item.paid
-                      ? handleToggleInstallment(item.payment, null)
-                      : setPendingPaymentId(item.payment.id)
+                      ? handleUndo(item.payment.id)
+                      : setModalState({ mode: 'installment', paymentId: item.payment.id })
                   }
-                  disabled={isProcessing}
+                  onLongPress={() => {
+                    if (item.partial) handleUndo(item.payment.id);
+                  }}
+                  disabled={processing}
                   style={({ pressed }) => pressed && styles.pressed}>
                   <View style={[styles.scheduleRow, { backgroundColor: theme.card, borderColor: theme.border }]}>
                     <View
                       style={[
                         styles.scheduleIcon,
-                        { backgroundColor: item.paid ? theme.successTint : theme.backgroundElement },
+                        {
+                          backgroundColor:
+                            item.paid || item.partial ? theme.successTint : theme.backgroundElement,
+                        },
                       ]}>
                       {item.paid ? (
                         <SymbolView
@@ -356,7 +397,9 @@ export default function LoanDetailScreen() {
                           size={15}
                         />
                       ) : (
-                        <ThemedText type="smallBold" themeColor="textSecondary">
+                        <ThemedText
+                          type="smallBold"
+                          themeColor={item.partial ? 'text' : 'textSecondary'}>
                           {item.index + 1}
                         </ThemedText>
                       )}
@@ -366,6 +409,11 @@ export default function LoanDetailScreen() {
                       <ThemedText type="small" themeColor="textSecondary">
                         {subtitle}
                       </ThemedText>
+                      {item.partial && (
+                        <View style={styles.partialBar}>
+                          <ProgressBar progress={item.paidCents / item.amountCents} height={4} />
+                        </View>
+                      )}
                       {item.payment.note && (
                         <ThemedText type="small" themeColor="textMuted" numberOfLines={2}>
                           {item.payment.note}
@@ -374,7 +422,7 @@ export default function LoanDetailScreen() {
                     </View>
                     <View style={styles.scheduleTrailing}>
                       <ThemedText type="smallBold" numeric themeColor={item.paid ? 'text' : 'textSecondary'}>
-                        {format(item.amountCents)}
+                        {item.partial ? format(item.remainingCents) : format(item.amountCents)}
                       </ThemedText>
                       <ThemedText
                         type="small"
@@ -413,15 +461,12 @@ export default function LoanDetailScreen() {
         onClose={() => setNotePaymentId(null)}
       />
       <LogPaymentModal
-        visible={pendingPaymentId !== null}
-        amountLabel={format(
-          loan.payments.find((payment) => payment.id === pendingPaymentId)?.amountCents ?? 0
-        )}
-        onConfirm={(paidAt) => {
-          const payment = loan.payments.find((row) => row.id === pendingPaymentId);
-          if (payment) handleToggleInstallment(payment, paidAt);
-        }}
-        onClose={() => setPendingPaymentId(null)}
+        visible={modalState !== null}
+        mode={modalState?.mode ?? 'installment'}
+        remainingDueCents={modalRemainingCents}
+        maxAmountCents={modalMaxCents}
+        onConfirm={handleConfirmPayment}
+        onClose={() => setModalState(null)}
       />
     </ThemedView>
   );
@@ -565,6 +610,11 @@ const styles = StyleSheet.create({
   scheduleLeading: {
     flex: 1,
     gap: 1,
+  },
+  partialBar: {
+    marginTop: 3,
+    marginBottom: 2,
+    maxWidth: 140,
   },
   scheduleTrailing: {
     alignItems: 'flex-end',

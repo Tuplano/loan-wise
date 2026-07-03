@@ -1,4 +1,5 @@
 import { addMonths } from '@/lib/date';
+import { principalCoveredCents, remainingDueCents } from '@/lib/schedule';
 import { startOfMonth } from '@/lib/stats';
 
 import type { LoanStatus } from '@/db/schema';
@@ -8,8 +9,16 @@ type PaymentLike = {
   isPaid: boolean;
   paidAt: Date | null;
   amountCents: number;
+  paidCents: number;
   principalPortionCents: number;
   interestPortionCents: number;
+};
+
+type TransactionLike = {
+  paidAt: Date;
+  amountCents: number;
+  principalAppliedCents: number;
+  interestAppliedCents: number;
 };
 
 type CategoryLike = {
@@ -24,6 +33,7 @@ type LoanLike = {
   principalCents: number;
   status: LoanStatus;
   payments: PaymentLike[];
+  transactions: TransactionLike[];
   category?: CategoryLike | null;
 };
 
@@ -56,14 +66,24 @@ function balanceAtMonth(loan: LoanLike, monthStart: Date, currentMonth: Date): n
   const monthEnd = addMonths(monthStart, 1);
   const projected = monthStart.getTime() > currentMonth.getTime();
 
-  const settledPrincipal = loan.payments.reduce((sum, payment) => {
-    const isSettled = projected
-      ? payment.dueDate.getTime() < monthEnd.getTime()
-      : payment.isPaid && !!payment.paidAt && payment.paidAt.getTime() < monthEnd.getTime();
-    return isSettled ? sum + payment.principalPortionCents : sum;
+  // Principal actually applied so far (installments, partials, and extras) as of monthEnd.
+  const actualPrincipal = loan.transactions.reduce(
+    (sum, transaction) =>
+      transaction.paidAt.getTime() < monthEnd.getTime() ? sum + transaction.principalAppliedCents : sum,
+    0
+  );
+
+  if (!projected) return Math.max(loan.principalCents - actualPrincipal, 0);
+
+  // Projected months: everything paid to date, plus each row's not-yet-covered principal
+  // once its due date passes. Fully-paid rows contribute 0 here (their principal is in
+  // the transactions already), so no double counting.
+  const scheduledPrincipal = loan.payments.reduce((sum, payment) => {
+    if (payment.dueDate.getTime() >= monthEnd.getTime()) return sum;
+    return sum + (payment.principalPortionCents - principalCoveredCents(payment));
   }, 0);
 
-  return Math.max(loan.principalCents - settledPrincipal, 0);
+  return Math.max(loan.principalCents - actualPrincipal - scheduledPrincipal, 0);
 }
 
 /**
@@ -128,15 +148,20 @@ export function projectedDebtFreeDate(loans: LoanLike[]): Date | null {
   return new Date(Math.max(...unpaidDueDates.map((date) => date.getTime())));
 }
 
-export function interestSplit(allPayments: Pick<PaymentLike, 'isPaid' | 'interestPortionCents'>[]) {
-  return allPayments.reduce(
-    (acc, payment) => {
-      if (payment.isPaid) acc.paidCents += payment.interestPortionCents;
-      else acc.remainingCents += payment.interestPortionCents;
-      return acc;
-    },
-    { paidCents: 0, remainingCents: 0 }
+export function interestSplit(
+  allPayments: Pick<PaymentLike, 'isPaid' | 'paidCents' | 'interestPortionCents'>[],
+  allTransactions: Pick<TransactionLike, 'interestAppliedCents'>[]
+) {
+  const paidCents = allTransactions.reduce((sum, tx) => sum + tx.interestAppliedCents, 0);
+  // Interest-first allocation: a row's paidCents covers its interest portion before principal.
+  const remainingCents = allPayments.reduce(
+    (sum, payment) =>
+      payment.isPaid
+        ? sum
+        : sum + payment.interestPortionCents - Math.min(payment.paidCents, payment.interestPortionCents),
+    0
   );
+  return { paidCents, remainingCents };
 }
 
 export type CategorySlice = {
@@ -164,9 +189,11 @@ export function categoryBreakdown(loans: LoanLike[]): CategorySlice[] {
     }
 
     const slice = slices.get(key)!;
+    for (const transaction of loan.transactions) {
+      slice.paidCents += transaction.amountCents;
+    }
     for (const payment of loan.payments) {
-      if (payment.isPaid) slice.paidCents += payment.amountCents;
-      else slice.owedCents += payment.amountCents;
+      slice.owedCents += remainingDueCents(payment);
     }
   }
 

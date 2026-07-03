@@ -16,7 +16,8 @@ import { useDisplayMoney } from '@/hooks/use-display-money';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDate } from '@/lib/date';
 import { isOpenStatus } from '@/lib/loan-status';
-import { isSameMonth, sumPaymentsInMonth } from '@/lib/stats';
+import { remainingDueCents } from '@/lib/schedule';
+import { isSameMonth, sumTransactionsInMonth } from '@/lib/stats';
 
 function greeting() {
   const hour = new Date().getHours();
@@ -30,8 +31,9 @@ export default function DashboardScreen() {
   const { format } = useDisplayMoney();
   const router = useRouter();
 
-  const { data: loans } = useLiveQuery(db.query.loans.findMany({ with: { payments: true, category: true } }));
-  const { data: allPayments } = useLiveQuery(db.query.payments.findMany());
+  const { data: loans } = useLiveQuery(
+    db.query.loans.findMany({ with: { payments: true, category: true, transactions: true } })
+  );
 
   const activeLoans = loans.filter((loan) => isOpenStatus(loan.status));
   const overdueLoans = loans.filter((loan) => loan.status === 'overdue');
@@ -39,8 +41,8 @@ export default function DashboardScreen() {
 
   const totalPrincipalCents = activeLoans.reduce((sum, loan) => sum + loan.principalCents, 0);
   const paidPrincipalCents = activeLoans.reduce((sum, loan) => {
-    const principalPaid = loan.payments.reduce(
-      (paid, payment) => paid + (payment.isPaid ? payment.principalPortionCents : 0),
+    const principalPaid = loan.transactions.reduce(
+      (paid, transaction) => paid + transaction.principalAppliedCents,
       0
     );
     return sum + Math.min(principalPaid, loan.principalCents);
@@ -50,8 +52,8 @@ export default function DashboardScreen() {
   const monthlyDueCents = activeLoans
     .flatMap((loan) => loan.payments)
     .filter((payment) => !payment.isPaid && isSameMonth(payment.dueDate, now))
-    .reduce((sum, payment) => sum + payment.amountCents, 0);
-  const paidThisMonthCents = sumPaymentsInMonth(allPayments);
+    .reduce((sum, payment) => sum + remainingDueCents(payment), 0);
+  const paidThisMonthCents = sumTransactionsInMonth(loans.flatMap((loan) => loan.transactions));
 
   const upcoming = [...activeLoans].sort(
     (a, b) => a.nextDueDate.getTime() - b.nextDueDate.getTime()
@@ -191,8 +193,8 @@ export default function DashboardScreen() {
           ) : (
             <View>
               {activeLoans.map((loan, index) => {
-                const principalPaid = loan.payments.reduce(
-                  (paid, payment) => paid + (payment.isPaid ? payment.principalPortionCents : 0),
+                const principalPaid = loan.transactions.reduce(
+                  (paid, transaction) => paid + transaction.principalAppliedCents,
                   0
                 );
                 const remainingCents = Math.max(loan.principalCents - principalPaid, 0);

@@ -32,7 +32,7 @@ export default function InsightsScreen() {
   const [loanFilter, setLoanFilter] = useState<number | 'all'>('all');
 
   const { data: loans } = useLiveQuery(
-    db.query.loans.findMany({ with: { payments: true, category: true } })
+    db.query.loans.findMany({ with: { payments: true, category: true, transactions: true } })
   );
   const { data: categoryList } = useLiveQuery(db.query.categories.findMany());
 
@@ -49,13 +49,19 @@ export default function InsightsScreen() {
   const balanceLines = useMemo(() => buildPerLoanBalanceTimelines(filteredLoans), [filteredLoans]);
   const debtFreeDate = useMemo(() => projectedDebtFreeDate(filteredLoans), [filteredLoans]);
   const allPayments = useMemo(() => filteredLoans.flatMap((loan) => loan.payments), [filteredLoans]);
-  const interest = useMemo(() => interestSplit(allPayments), [allPayments]);
+  const allTransactions = useMemo(
+    () => filteredLoans.flatMap((loan) => loan.transactions),
+    [filteredLoans]
+  );
+  const interest = useMemo(
+    () => interestSplit(allPayments, allTransactions),
+    [allPayments, allTransactions]
+  );
   const categories = useMemo(() => categoryBreakdown(filteredLoans), [filteredLoans]);
 
   const totalPrincipalCents = filteredLoans.reduce((sum, loan) => sum + loan.principalCents, 0);
-  const paidPrincipalCents = filteredLoans.reduce(
-    (sum, loan) =>
-      sum + loan.payments.reduce((paid, payment) => paid + (payment.isPaid ? payment.principalPortionCents : 0), 0),
+  const paidPrincipalCents = allTransactions.reduce(
+    (sum, transaction) => sum + transaction.principalAppliedCents,
     0
   );
   const overallProgress = totalPrincipalCents > 0 ? paidPrincipalCents / totalPrincipalCents : 0;
