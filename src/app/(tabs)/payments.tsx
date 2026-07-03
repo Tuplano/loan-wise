@@ -29,6 +29,7 @@ type PaymentEntry = {
   interestPortionCents: number;
   onTime: boolean;
   daysLate: number;
+  note: string | null;
 };
 
 export default function PaymentsScreen() {
@@ -68,6 +69,7 @@ export default function PaymentsScreen() {
           interestPortionCents: entry.payment.interestPortionCents,
           onTime: entry.onTime,
           daysLate: entry.daysLate,
+          note: entry.payment.note,
         }))
     );
     entries.sort((a, b) => b.paidAt.getTime() - a.paidAt.getTime());
@@ -167,6 +169,11 @@ export default function PaymentsScreen() {
                           ? `${formatDate(item.paidAt)} · ${formatMoney(item.principalPortionCents, currency)} principal + ${formatMoney(item.interestPortionCents, currency)} int`
                           : `${formatDate(item.paidAt)} · ${item.daysLate} day${item.daysLate === 1 ? '' : 's'} late`}
                       </ThemedText>
+                      {item.note && (
+                        <ThemedText type="small" themeColor="textMuted" numberOfLines={1}>
+                          {item.note}
+                        </ThemedText>
+                      )}
                     </View>
                     <ThemedText type="smallBold" numeric style={{ color: theme.primaryDark }}>
                       {formatMoney(item.amountCents, currency)}

@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { PaymentNoteModal } from '@/components/payment-note-modal';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { PillBadge } from '@/components/ui/pill-badge';
@@ -35,6 +36,7 @@ export default function LoanDetailScreen() {
   const currency = useCurrency();
   const router = useRouter();
   const [processingId, setProcessingId] = useState<number | null>(null);
+  const [notePaymentId, setNotePaymentId] = useState<number | null>(null);
 
   const { data: loanResult } = useLiveQuery(
     db.query.loans.findFirst({
@@ -166,6 +168,10 @@ export default function LoanDetailScreen() {
     } finally {
       setProcessingId(null);
     }
+  }
+
+  async function handleSaveNote(paymentId: number, note: string | null) {
+    await db.update(payments).set({ note }).where(eq(payments.id, paymentId));
   }
 
   function handleDelete() {
@@ -353,6 +359,11 @@ export default function LoanDetailScreen() {
                       <ThemedText type="small" themeColor="textSecondary">
                         {subtitle}
                       </ThemedText>
+                      {item.payment.note && (
+                        <ThemedText type="small" themeColor="textMuted" numberOfLines={2}>
+                          {item.payment.note}
+                        </ThemedText>
+                      )}
                     </View>
                     <View style={styles.scheduleTrailing}>
                       <ThemedText type="smallBold" numeric themeColor={item.paid ? 'text' : 'textSecondary'}>
@@ -364,6 +375,20 @@ export default function LoanDetailScreen() {
                         {trailingNote}
                       </ThemedText>
                     </View>
+                    <Pressable
+                      hitSlop={8}
+                      onPress={() => setNotePaymentId(item.payment.id)}
+                      style={styles.noteButton}>
+                      <SymbolView
+                        tintColor={item.payment.note ? theme.primary : theme.textSecondary}
+                        name={{
+                          ios: item.payment.note ? 'note.text' : 'square.and.pencil',
+                          android: 'edit_note',
+                          web: 'edit_note',
+                        }}
+                        size={17}
+                      />
+                    </Pressable>
                   </View>
                 </Pressable>
               );
@@ -372,6 +397,14 @@ export default function LoanDetailScreen() {
           />
         </View>
       </SafeAreaView>
+      <PaymentNoteModal
+        visible={notePaymentId !== null}
+        initialNote={loan.payments.find((payment) => payment.id === notePaymentId)?.note ?? null}
+        onSave={(note) => {
+          if (notePaymentId !== null) handleSaveNote(notePaymentId, note);
+        }}
+        onClose={() => setNotePaymentId(null)}
+      />
     </ThemedView>
   );
 }
@@ -518,5 +551,8 @@ const styles = StyleSheet.create({
   scheduleTrailing: {
     alignItems: 'flex-end',
     gap: 1,
+  },
+  noteButton: {
+    padding: Spacing.one,
   },
 });
