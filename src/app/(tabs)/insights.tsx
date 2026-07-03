@@ -12,7 +12,7 @@ import { ProgressBar } from '@/components/ui/progress-bar';
 import { ProgressRing } from '@/components/ui/progress-ring';
 import { BottomTabInset, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { db } from '@/db/client';
-import { useCurrency } from '@/hooks/use-currency';
+import { useDisplayMoney } from '@/hooks/use-display-money';
 import { useTheme } from '@/hooks/use-theme';
 import {
   buildPerLoanBalanceTimelines,
@@ -21,13 +21,12 @@ import {
   projectedDebtFreeDate,
 } from '@/lib/analytics';
 import { formatDate } from '@/lib/date';
-import { formatMoney } from '@/lib/format';
 
 type FilterMode = 'category' | 'loan';
 
 export default function InsightsScreen() {
   const theme = useTheme();
-  const currency = useCurrency();
+  const { format } = useDisplayMoney();
   const [filterMode, setFilterMode] = useState<FilterMode>('category');
   const [categoryFilter, setCategoryFilter] = useState<number | 'all'>('all');
   const [loanFilter, setLoanFilter] = useState<number | 'all'>('all');
@@ -171,7 +170,7 @@ export default function InsightsScreen() {
                     {debtFreeDate ? formatDate(debtFreeDate) : '🎉'}
                   </ThemedText>
                   <ThemedText type="small" themeColor="textSecondary">
-                    {formatMoney(paidPrincipalCents, currency)} of {formatMoney(totalPrincipalCents, currency)} principal paid
+                    {format(paidPrincipalCents)} of {format(totalPrincipalCents)} principal paid
                   </ThemedText>
                 </View>
               </View>
@@ -199,7 +198,7 @@ export default function InsightsScreen() {
                         Paid
                       </ThemedText>
                       <ThemedText type="smallBold" numeric style={{ color: theme.primaryDark }}>
-                        {formatMoney(paidPrincipalCents, currency)}
+                        {format(paidPrincipalCents)}
                       </ThemedText>
                     </View>
                     <View style={styles.interestRight}>
@@ -207,7 +206,7 @@ export default function InsightsScreen() {
                         Remaining
                       </ThemedText>
                       <ThemedText type="smallBold" numeric themeColor="danger">
-                        {formatMoney(remainingPrincipalCents, currency)}
+                        {format(remainingPrincipalCents)}
                       </ThemedText>
                     </View>
                   </View>
@@ -227,7 +226,7 @@ export default function InsightsScreen() {
                         Paid
                       </ThemedText>
                       <ThemedText type="smallBold" numeric style={{ color: theme.primaryDark }}>
-                        {formatMoney(interest.paidCents, currency)}
+                        {format(interest.paidCents)}
                       </ThemedText>
                     </View>
                     <View style={styles.interestRight}>
@@ -235,7 +234,7 @@ export default function InsightsScreen() {
                         Remaining
                       </ThemedText>
                       <ThemedText type="smallBold" numeric themeColor="danger">
-                        {formatMoney(interest.remainingCents, currency)}
+                        {format(interest.remainingCents)}
                       </ThemedText>
                     </View>
                   </View>

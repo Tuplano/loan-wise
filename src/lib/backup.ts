@@ -13,6 +13,7 @@ import {
   type LoanStatus,
 } from '@/db/schema';
 import type { CurrencyCode } from '@/lib/currency';
+import { convertCentsSync } from '@/lib/exchange-rates';
 import { formatMoney } from '@/lib/format';
 import { refreshAllLoanStatuses } from '@/lib/loan-status';
 import { cancelAllScheduledNotifications, scheduleLoanReminder } from '@/lib/notifications';
@@ -404,7 +405,7 @@ export async function importBackup(backup: BackupFileV1): Promise<void> {
     if (reminder.loan.status === 'paid_off') continue;
     const notificationId = await scheduleLoanReminder({
       loanName: reminder.loan.name,
-      amountLabel: formatMoney(reminder.loan.monthlyPaymentCents, currency),
+      amountLabel: formatMoney(convertCentsSync(reminder.loan.monthlyPaymentCents, currency), currency),
       dueDate: reminder.loan.nextDueDate,
       daysBefore: reminder.daysBefore,
     });

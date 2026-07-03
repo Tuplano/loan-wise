@@ -5,9 +5,8 @@ import { ThemedText } from './themed-text';
 
 import { ProgressRing } from '@/components/ui/progress-ring';
 import { Radii, Spacing } from '@/constants/theme';
-import { useCurrency } from '@/hooks/use-currency';
+import { useDisplayMoney } from '@/hooks/use-display-money';
 import { useTheme } from '@/hooks/use-theme';
-import { formatMoney } from '@/lib/format';
 
 type ActiveLoanRingRowProps = {
   name: string;
@@ -27,7 +26,7 @@ export function ActiveLoanRingRow({
   onPress,
 }: ActiveLoanRingRowProps) {
   const theme = useTheme();
-  const currency = useCurrency();
+  const { format } = useDisplayMoney();
 
   return (
     <Animated.View
@@ -52,7 +51,7 @@ export function ActiveLoanRingRow({
 
           <View style={styles.trailing}>
             <ThemedText type="smallBold" numeric style={styles.name}>
-              {formatMoney(remainingCents, currency)}
+              {format(remainingCents)}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary">
               remaining

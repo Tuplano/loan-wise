@@ -15,9 +15,10 @@ import { ProgressRing } from '@/components/ui/progress-ring';
 import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { db } from '@/db/client';
 import { loans, payments, reminders, type LoanStatus } from '@/db/schema';
-import { useCurrency } from '@/hooks/use-currency';
+import { useDisplayMoney } from '@/hooks/use-display-money';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDate, ordinalSuffix } from '@/lib/date';
+import { convertCentsSync } from '@/lib/exchange-rates';
 import { formatMoney } from '@/lib/format';
 import { deriveLoanStatus } from '@/lib/loan-status';
 import { cancelReminder, scheduleLoanReminder } from '@/lib/notifications';
@@ -33,7 +34,7 @@ export default function LoanDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const loanId = Number(id);
   const theme = useTheme();
-  const currency = useCurrency();
+  const { format, currency } = useDisplayMoney();
   const router = useRouter();
   const [processingId, setProcessingId] = useState<number | null>(null);
   const [notePaymentId, setNotePaymentId] = useState<number | null>(null);
@@ -83,7 +84,7 @@ export default function LoanDetailScreen() {
     const notificationId = newDueDate
       ? await scheduleLoanReminder({
           loanName: loan.name,
-          amountLabel: formatMoney(loan.monthlyPaymentCents, currency),
+          amountLabel: formatMoney(convertCentsSync(loan.monthlyPaymentCents, currency), currency),
           dueDate: newDueDate,
           daysBefore: reminder.daysBefore,
         })
@@ -98,7 +99,7 @@ export default function LoanDetailScreen() {
       if (nextEnabled) {
         const notificationId = await scheduleLoanReminder({
           loanName: loan.name,
-          amountLabel: formatMoney(loan.monthlyPaymentCents, currency),
+          amountLabel: formatMoney(convertCentsSync(loan.monthlyPaymentCents, currency), currency),
           dueDate: loan.nextDueDate,
           daysBefore: reminder.daysBefore,
         });
@@ -120,7 +121,7 @@ export default function LoanDetailScreen() {
     const daysBefore = settings?.reminderDaysBefore ?? 3;
     const notificationId = await scheduleLoanReminder({
       loanName: loan.name,
-      amountLabel: formatMoney(loan.monthlyPaymentCents, currency),
+      amountLabel: formatMoney(convertCentsSync(loan.monthlyPaymentCents, currency), currency),
       dueDate: loan.nextDueDate,
       daysBefore,
     });
@@ -262,14 +263,14 @@ export default function LoanDetailScreen() {
                       {Math.round(paidOffProgress * 100)}%
                     </ThemedText>
                     <ThemedText type="small" themeColor="textSecondary" numeric>
-                      {formatMoney(principalPaidCents, currency)} of {formatMoney(loan.principalCents, currency)}
+                      {format(principalPaidCents)} of {format(loan.principalCents)}
                     </ThemedText>
                   </ProgressRing>
                 </View>
 
                 <View style={styles.statsGrid}>
-                  <StatCard label="Principal" value={formatMoney(loan.principalCents, currency)} />
-                  <StatCard label="Monthly" value={formatMoney(loan.monthlyPaymentCents, currency)} />
+                  <StatCard label="Principal" value={format(loan.principalCents)} />
+                  <StatCard label="Monthly" value={format(loan.monthlyPaymentCents)} />
                 </View>
 
                 <View style={[styles.breakdownCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -278,22 +279,22 @@ export default function LoanDetailScreen() {
                   </ThemedText>
                   <View style={styles.breakdownRow}>
                     <ThemedText type="small">
-                      Base ({formatMoney(loan.principalCents, currency)} ÷ {loan.termMonths} mo)
+                      Base ({format(loan.principalCents)} ÷ {loan.termMonths} mo)
                     </ThemedText>
                     <ThemedText type="smallBold" numeric>
-                      {formatMoney(basePaymentCents, currency)}
+                      {format(basePaymentCents)}
                     </ThemedText>
                   </View>
                   <View style={styles.breakdownRow}>
                     <ThemedText type="small">Interest ({loan.interestRate}% / mo)</ThemedText>
                     <ThemedText type="smallBold" numeric>
-                      {formatMoney(interestPaymentCents, currency)}
+                      {format(interestPaymentCents)}
                     </ThemedText>
                   </View>
                   <View style={[styles.breakdownRow, styles.breakdownTotal, { borderTopColor: theme.divider }]}>
                     <ThemedText type="smallBold">Monthly due</ThemedText>
                     <ThemedText type="smallBold" numeric style={{ color: theme.primaryDark }}>
-                      {formatMoney(loan.monthlyPaymentCents, currency)}
+                      {format(loan.monthlyPaymentCents)}
                     </ThemedText>
                   </View>
                 </View>
@@ -367,7 +368,7 @@ export default function LoanDetailScreen() {
                     </View>
                     <View style={styles.scheduleTrailing}>
                       <ThemedText type="smallBold" numeric themeColor={item.paid ? 'text' : 'textSecondary'}>
-                        {formatMoney(item.amountCents, currency)}
+                        {format(item.amountCents)}
                       </ThemedText>
                       <ThemedText
                         type="small"

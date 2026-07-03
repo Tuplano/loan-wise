@@ -11,10 +11,9 @@ import { ThemedView } from '@/components/themed-view';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { BottomTabInset, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { db } from '@/db/client';
-import { useCurrency } from '@/hooks/use-currency';
+import { useDisplayMoney } from '@/hooks/use-display-money';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDate } from '@/lib/date';
-import { formatMoney } from '@/lib/format';
 import { isOpenStatus } from '@/lib/loan-status';
 import { getScheduleForLoan } from '@/lib/schedule';
 import { isSameMonth, monthLabel, sumPaymentsInMonth } from '@/lib/stats';
@@ -34,7 +33,7 @@ type PaymentEntry = {
 
 export default function PaymentsScreen() {
   const theme = useTheme();
-  const currency = useCurrency();
+  const { format } = useDisplayMoney();
   const router = useRouter();
 
   const { data: loanList } = useLiveQuery(
@@ -98,7 +97,7 @@ export default function PaymentsScreen() {
                   Paid in {monthLabel(now).split(' ')[0]}
                 </ThemedText>
                 <ThemedText type="title" numeric style={styles.summaryValue}>
-                  {formatMoney(paidThisMonthCents, currency)}
+                  {format(paidThisMonthCents)}
                 </ThemedText>
               </View>
               <View style={styles.summaryRight}>
@@ -109,7 +108,7 @@ export default function PaymentsScreen() {
                   type="smallBold"
                   numeric
                   style={[styles.summaryRemaining, { color: theme.danger }]}>
-                  {formatMoney(remainingCents, currency)}
+                  {format(remainingCents)}
                 </ThemedText>
               </View>
             </View>
@@ -166,7 +165,7 @@ export default function PaymentsScreen() {
                       </ThemedText>
                       <ThemedText type="small" themeColor="textSecondary" numberOfLines={1}>
                         {item.onTime
-                          ? `${formatDate(item.paidAt)} · ${formatMoney(item.principalPortionCents, currency)} principal + ${formatMoney(item.interestPortionCents, currency)} int`
+                          ? `${formatDate(item.paidAt)} · ${format(item.principalPortionCents)} principal + ${format(item.interestPortionCents)} int`
                           : `${formatDate(item.paidAt)} · ${item.daysLate} day${item.daysLate === 1 ? '' : 's'} late`}
                       </ThemedText>
                       {item.note && (
@@ -176,7 +175,7 @@ export default function PaymentsScreen() {
                       )}
                     </View>
                     <ThemedText type="smallBold" numeric style={{ color: theme.primaryDark }}>
-                      {formatMoney(item.amountCents, currency)}
+                      {format(item.amountCents)}
                     </ThemedText>
                   </View>
                 </Pressable>

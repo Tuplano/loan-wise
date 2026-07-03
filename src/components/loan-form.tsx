@@ -21,6 +21,7 @@ import { Radii, Spacing } from '@/constants/theme';
 import { db } from '@/db/client';
 import { useAppSettings } from '@/hooks/use-app-settings';
 import { useTheme } from '@/hooks/use-theme';
+import { BASE_CURRENCY } from '@/lib/exchange-rates';
 import { formatMoney } from '@/lib/format';
 
 function toCents(value: string) {
@@ -64,7 +65,9 @@ export function LoanForm({ title, submitLabel = 'Save loan', initialValues, onSu
   const theme = useTheme();
   const { data: categories } = useLiveQuery(db.query.categories.findMany());
   const settings = useAppSettings();
-  const currency = settings?.currency ?? 'PHP';
+  // Loans are always entered/stored in the app's fixed base currency — the display currency
+  // in Settings only affects how amounts are shown elsewhere, via a live conversion.
+  const currency = BASE_CURRENCY;
 
   const [name, setName] = useState(initialValues?.name ?? '');
   const [lender, setLender] = useState(initialValues?.lender ?? '');
@@ -173,6 +176,11 @@ export function LoanForm({ title, submitLabel = 'Save loan', initialValues, onSu
             </View>
           </LinearGradient>
 
+          <ThemedText type="small" themeColor="textMuted" style={styles.baseCurrencyHint}>
+            Loans are entered and stored in {BASE_CURRENCY}. Your display currency in Settings
+            converts amounts for viewing everywhere else.
+          </ThemedText>
+
           <Field label="Loan name">
             <TextInput
               value={name}
@@ -243,7 +251,7 @@ export function LoanForm({ title, submitLabel = 'Save loan', initialValues, onSu
           </View>
 
           <View style={styles.row}>
-            <Field label="Principal" style={styles.flex}>
+            <Field label={`Principal (${BASE_CURRENCY})`} style={styles.flex}>
               <TextInput
                 value={principal}
                 onChangeText={setPrincipal}
@@ -358,6 +366,9 @@ const styles = StyleSheet.create({
   },
   heroLabel: {
     color: 'rgba(255,255,255,0.75)',
+  },
+  baseCurrencyHint: {
+    marginTop: -Spacing.two,
   },
   heroValue: {
     color: '#FFFFFF',

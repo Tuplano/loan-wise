@@ -8,10 +8,9 @@ import { PillBadge } from '@/components/ui/pill-badge';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Radii, Spacing } from '@/constants/theme';
 import type { LoanStatus } from '@/db/schema';
-import { useCurrency } from '@/hooks/use-currency';
+import { useDisplayMoney } from '@/hooks/use-display-money';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDate } from '@/lib/date';
-import { formatMoney } from '@/lib/format';
 
 type LoanRowProps = {
   name: string;
@@ -49,7 +48,7 @@ export function LoanRow({
   onDelete,
 }: LoanRowProps) {
   const theme = useTheme();
-  const currency = useCurrency();
+  const { format } = useDisplayMoney();
   const progress = principalCents > 0 ? paidCents / principalCents : 0;
   const daysUntilDue = (nextDueDate.getTime() - Date.now()) / 86_400_000;
   const isOverdue = status === 'overdue';
@@ -87,10 +86,10 @@ export function LoanRow({
 
           <View style={styles.amountRow}>
             <ThemedText type="subtitle" numeric>
-              {formatMoney(paidCents, currency)}
+              {format(paidCents)}
             </ThemedText>
             <ThemedText type="small" themeColor="textSecondary" numeric>
-              of {formatMoney(principalCents, currency)} paid
+              of {format(principalCents)} paid
             </ThemedText>
           </View>
 
@@ -102,7 +101,7 @@ export function LoanRow({
                 Monthly
               </ThemedText>
               <ThemedText type="smallBold" numeric>
-                {formatMoney(monthlyPaymentCents, currency)}
+                {format(monthlyPaymentCents)}
               </ThemedText>
             </View>
             <View style={styles.footerRight}>

@@ -2,9 +2,8 @@ import { StyleSheet, View } from 'react-native';
 
 import { ThemedText } from '@/components/themed-text';
 import { Radii, Spacing } from '@/constants/theme';
-import { useCurrency } from '@/hooks/use-currency';
+import { useDisplayMoney } from '@/hooks/use-display-money';
 import { useTheme } from '@/hooks/use-theme';
-import { formatMoney } from '@/lib/format';
 
 import type { CategorySlice } from '@/lib/analytics';
 
@@ -14,7 +13,7 @@ type CategoryBarsProps = {
 
 export function CategoryBars({ slices }: CategoryBarsProps) {
   const theme = useTheme();
-  const currency = useCurrency();
+  const { format } = useDisplayMoney();
   const maxTotal = Math.max(...slices.map((slice) => slice.paidCents + slice.owedCents), 1);
 
   return (
@@ -35,7 +34,7 @@ export function CategoryBars({ slices }: CategoryBarsProps) {
                 </ThemedText>
               </View>
               <ThemedText type="smallBold" numeric>
-                {formatMoney(total, currency)}
+                {format(total)}
               </ThemedText>
             </View>
             <View style={[styles.track, { backgroundColor: theme.backgroundElement }]}>

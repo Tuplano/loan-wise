@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { LoanForm } from '@/components/loan-form';
 import { db } from '@/db/client';
 import { loans, payments, reminders } from '@/db/schema';
+import { convertCentsSync } from '@/lib/exchange-rates';
 import { formatMoney } from '@/lib/format';
 import { deriveLoanStatus } from '@/lib/loan-status';
 import { scheduleLoanReminder } from '@/lib/notifications';
@@ -38,7 +39,10 @@ export default function AddLoanScreen() {
         if (settings?.remindersEnabled) {
           const notificationId = await scheduleLoanReminder({
             loanName: createdLoan.name,
-            amountLabel: formatMoney(createdLoan.monthlyPaymentCents, settings.currency),
+            amountLabel: formatMoney(
+              convertCentsSync(createdLoan.monthlyPaymentCents, settings.currency),
+              settings.currency
+            ),
             dueDate: createdLoan.nextDueDate,
             daysBefore: settings.reminderDaysBefore,
           });

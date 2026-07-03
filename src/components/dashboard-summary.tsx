@@ -6,8 +6,7 @@ import { ThemedText } from './themed-text';
 
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Radii, Spacing } from '@/constants/theme';
-import { useCurrency } from '@/hooks/use-currency';
-import { formatMoney } from '@/lib/format';
+import { useDisplayMoney } from '@/hooks/use-display-money';
 
 type DashboardSummaryProps = {
   totalPrincipalCents: number;
@@ -20,7 +19,7 @@ export function DashboardSummary({
   paidPrincipalCents,
   activeCount,
 }: DashboardSummaryProps) {
-  const currency = useCurrency();
+  const { format } = useDisplayMoney();
   const outstandingCents = Math.max(totalPrincipalCents - paidPrincipalCents, 0);
   const progress = totalPrincipalCents > 0 ? paidPrincipalCents / totalPrincipalCents : 0;
 
@@ -37,7 +36,7 @@ export function DashboardSummary({
           Total outstanding balance
         </ThemedText>
         <ThemedText type="display" numeric style={styles.balanceText}>
-          {formatMoney(outstandingCents, currency)}
+          {format(outstandingCents)}
         </ThemedText>
         <ThemedText type="small" style={[styles.labelText, styles.subLabel]}>
           {activeCount === 1 ? 'across 1 active loan' : `across ${activeCount} active loans`}
@@ -52,10 +51,10 @@ export function DashboardSummary({
 
         <View style={styles.footerRow}>
           <ThemedText type="smallBold" numeric style={styles.footerPaid}>
-            {formatMoney(paidPrincipalCents, currency)} paid
+            {format(paidPrincipalCents)} paid
           </ThemedText>
           <ThemedText type="smallBold" numeric style={styles.footerTotal}>
-            of {formatMoney(totalPrincipalCents, currency)}
+            of {format(totalPrincipalCents)}
           </ThemedText>
         </View>
       </LinearGradient>

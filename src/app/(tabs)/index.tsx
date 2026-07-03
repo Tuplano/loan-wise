@@ -12,10 +12,9 @@ import { PillBadge } from '@/components/ui/pill-badge';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { BottomTabInset, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { db } from '@/db/client';
-import { useCurrency } from '@/hooks/use-currency';
+import { useDisplayMoney } from '@/hooks/use-display-money';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDate } from '@/lib/date';
-import { formatMoney } from '@/lib/format';
 import { isOpenStatus } from '@/lib/loan-status';
 import { sumPaymentsInMonth } from '@/lib/stats';
 
@@ -28,7 +27,7 @@ function greeting() {
 
 export default function DashboardScreen() {
   const theme = useTheme();
-  const currency = useCurrency();
+  const { format } = useDisplayMoney();
   const router = useRouter();
 
   const { data: loans } = useLiveQuery(db.query.loans.findMany({ with: { payments: true, category: true } }));
@@ -95,7 +94,7 @@ export default function DashboardScreen() {
                     {overdueLoans.length === 1 ? '1 loan is overdue' : `${overdueLoans.length} loans are overdue`}
                   </ThemedText>
                   <ThemedText type="small" style={{ color: theme.danger }}>
-                    {formatMoney(overdueTotalCents, currency)} past due
+                    {format(overdueTotalCents)} past due
                   </ThemedText>
                 </View>
                 <SymbolView
@@ -118,7 +117,7 @@ export default function DashboardScreen() {
               }
               iconBg={theme.dangerTint}
               label="Due this month"
-              value={formatMoney(monthlyDueCents, currency)}
+              value={format(monthlyDueCents)}
             />
             <StatCard
               icon={
@@ -130,7 +129,7 @@ export default function DashboardScreen() {
               }
               iconBg={theme.primaryTint}
               label="Paid this month"
-              value={formatMoney(paidThisMonthCents, currency)}
+              value={format(paidThisMonthCents)}
             />
           </View>
 
@@ -165,7 +164,7 @@ export default function DashboardScreen() {
                   </ThemedText>
                 </View>
                 <ThemedText type="subtitle" numeric style={{ color: theme.primaryDark }}>
-                  {formatMoney(nextDue.monthlyPaymentCents, currency)}
+                  {format(nextDue.monthlyPaymentCents)}
                 </ThemedText>
               </View>
               <PrimaryButton label="Log payment" onPress={() => router.push(`/loan/${nextDue.id}`)} />

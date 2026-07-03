@@ -17,10 +17,12 @@ import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { db } from '@/db/client';
 import { appSettings, type AppearanceMode } from '@/db/schema';
+import { useDisplayMoney } from '@/hooks/use-display-money';
 import { useTheme } from '@/hooks/use-theme';
 import { clearPin, setPin } from '@/lib/app-lock';
 import { exportBackup, exportPaymentsCsv, importBackup, validateBackup } from '@/lib/backup';
 import { CURRENCY_OPTIONS, type CurrencyCode } from '@/lib/currency';
+import { BASE_CURRENCY } from '@/lib/exchange-rates';
 import { ensureNotificationPermission, isNotificationsAvailable } from '@/lib/notifications';
 
 const MIN_DAYS_BEFORE = 1;
@@ -37,6 +39,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { data: categoryList } = useLiveQuery(db.query.categories.findMany());
   const { data: settings } = useLiveQuery(db.query.appSettings.findFirst());
+  const { isConverted, isLive, rate, fetchedAt } = useDisplayMoney();
 
   const [editingProfileField, setEditingProfileField] = useState<'name' | 'email' | null>(null);
   const [profileDraft, setProfileDraft] = useState('');
@@ -307,7 +310,7 @@ export default function SettingsScreen() {
                   tint={theme.primary}
                   bg={theme.primaryTint}
                 />
-                <ThemedText style={styles.rowLabel}>Currency</ThemedText>
+                <ThemedText style={styles.rowLabel}>Display currency</ThemedText>
                 <ThemedText type="smallBold" themeColor="textSecondary">
                   {settings?.currency ?? 'PHP'}
                 </ThemedText>
@@ -323,6 +326,17 @@ export default function SettingsScreen() {
                 />
               </View>
             </Pressable>
+            {isConverted && (
+              <View style={[styles.currencyHintRow, { borderBottomColor: theme.divider }]}>
+                <ThemedText type="small" themeColor="textMuted">
+                  {isLive
+                    ? `Live-converted from ${BASE_CURRENCY} · 1 ${BASE_CURRENCY} ≈ ${rate.toFixed(4)} ${settings?.currency}${
+                        fetchedAt ? ` · updated ${new Date(fetchedAt).toLocaleDateString()}` : ''
+                      }`
+                    : `Rate unavailable — showing ${BASE_CURRENCY} until a connection is available`}
+                </ThemedText>
+              </View>
+            )}
             {expandedPicker === 'currency' && (
               <View style={[styles.optionRow, { borderBottomColor: theme.divider }]}>
                 {CURRENCY_OPTIONS.map((option) => {
@@ -734,6 +748,11 @@ const styles = StyleSheet.create({
   rowValueGroup: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  currencyHintRow: {
+    paddingHorizontal: Spacing.three,
+    paddingBottom: Spacing.two + 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   optionRow: {
     flexDirection: 'row',
