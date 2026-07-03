@@ -7,15 +7,18 @@ import * as Haptics from 'expo-haptics';
 import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import { useState } from 'react';
 import Constants from 'expo-constants';
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
+import { Alert, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { LockScreen } from '@/components/lock-screen';
+import { PinSetupModal } from '@/components/pin-setup-modal';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { BottomTabInset, MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { db } from '@/db/client';
 import { appSettings, type AppearanceMode } from '@/db/schema';
 import { useTheme } from '@/hooks/use-theme';
+import { clearPin, setPin } from '@/lib/app-lock';
 import { exportBackup, exportPaymentsCsv, importBackup, validateBackup } from '@/lib/backup';
 import { CURRENCY_OPTIONS, type CurrencyCode } from '@/lib/currency';
 import { ensureNotificationPermission, isNotificationsAvailable } from '@/lib/notifications';
@@ -41,6 +44,8 @@ export default function SettingsScreen() {
   const [editingInterestRate, setEditingInterestRate] = useState(false);
   const [interestRateDraft, setInterestRateDraft] = useState('');
   const [dataBusy, setDataBusy] = useState(false);
+  const [pinSetupVisible, setPinSetupVisible] = useState(false);
+  const [verifyToDisableVisible, setVerifyToDisableVisible] = useState(false);
 
   async function handleToggleReminders(value: boolean) {
     if (!settings) return;
@@ -194,6 +199,30 @@ export default function SettingsScreen() {
     } finally {
       setDataBusy(false);
     }
+  }
+
+  function handleToggleAppLock(value: boolean) {
+    if (!settings) return;
+    Haptics.selectionAsync();
+    if (value) {
+      setPinSetupVisible(true);
+    } else {
+      setVerifyToDisableVisible(true);
+    }
+  }
+
+  async function handlePinSetupComplete(pin: string) {
+    if (!settings) return;
+    await setPin(pin);
+    await db.update(appSettings).set({ appLockEnabled: true }).where(eq(appSettings.id, settings.id));
+    setPinSetupVisible(false);
+  }
+
+  async function handleDisableVerified() {
+    if (!settings) return;
+    await clearPin();
+    await db.update(appSettings).set({ appLockEnabled: false }).where(eq(appSettings.id, settings.id));
+    setVerifyToDisableVisible(false);
   }
 
   const initials = (settings?.displayName ?? 'You')
@@ -545,6 +574,30 @@ export default function SettingsScreen() {
             </>
           )}
 
+          {Platform.OS !== 'web' && (
+            <>
+              <ThemedText type="sectionLabel" themeColor="textMuted" style={styles.sectionLabel}>
+                Security
+              </ThemedText>
+              <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <View style={[styles.row, styles.rowNoBorder]}>
+                  <IconBadge
+                    icon={{ ios: 'lock.fill', android: 'lock', web: 'lock' }}
+                    tint={theme.danger}
+                    bg={theme.dangerTint}
+                  />
+                  <ThemedText style={styles.rowLabel}>App lock</ThemedText>
+                  <Switch
+                    value={settings?.appLockEnabled ?? false}
+                    onValueChange={handleToggleAppLock}
+                    trackColor={{ false: theme.backgroundSelected, true: theme.primary }}
+                    thumbColor="#ffffff"
+                  />
+                </View>
+              </View>
+            </>
+          )}
+
           <ThemedText type="sectionLabel" themeColor="textMuted" style={styles.sectionLabel}>
             About
           </ThemedText>
@@ -563,6 +616,17 @@ export default function SettingsScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
+      <PinSetupModal
+        visible={pinSetupVisible}
+        onComplete={handlePinSetupComplete}
+        onCancel={() => setPinSetupVisible(false)}
+      />
+      <Modal
+        visible={verifyToDisableVisible}
+        animationType="slide"
+        onRequestClose={() => setVerifyToDisableVisible(false)}>
+        <LockScreen onUnlock={handleDisableVerified} onCancel={() => setVerifyToDisableVisible(false)} />
+      </Modal>
     </ThemedView>
   );
 }

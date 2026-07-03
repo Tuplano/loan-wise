@@ -13,6 +13,7 @@ import { useEffect } from 'react';
 import { AppState, useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
+import { AppLockGate } from '@/components/app-lock-gate';
 import { db } from '@/db/client';
 import migrations from '@/db/migrations/migrations';
 import { seedAppSettings, seedDefaultCategories } from '@/db/seed';
@@ -58,13 +59,15 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <AnimatedSplashOverlay />
       {ready && (
-        <Stack>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="add-loan" options={{ presentation: 'modal', title: 'Add Loan' }} />
-          <Stack.Screen name="loan/[id]/index" options={{ title: 'Loan' }} />
-          <Stack.Screen name="loan/[id]/edit" options={{ title: 'Edit Loan' }} />
-          <Stack.Screen name="categories" options={{ title: 'Categories' }} />
-        </Stack>
+        <AppLockGate>
+          <Stack>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="add-loan" options={{ presentation: 'modal', title: 'Add Loan' }} />
+            <Stack.Screen name="loan/[id]/index" options={{ title: 'Loan' }} />
+            <Stack.Screen name="loan/[id]/edit" options={{ title: 'Edit Loan' }} />
+            <Stack.Screen name="categories" options={{ title: 'Categories' }} />
+          </Stack>
+        </AppLockGate>
       )}
     </ThemeProvider>
   );

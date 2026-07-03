@@ -96,6 +96,7 @@ export const appSettings = sqliteTable('app_settings', {
   defaultInterestRate: real('default_interest_rate').notNull().default(0),
   remindersEnabled: integer('reminders_enabled', { mode: 'boolean' }).notNull().default(true),
   reminderDaysBefore: integer('reminder_days_before').notNull().default(3),
+  appLockEnabled: integer('app_lock_enabled', { mode: 'boolean' }).notNull().default(false),
 });
 
 export const categoriesRelations = relations(categories, ({ many }) => ({

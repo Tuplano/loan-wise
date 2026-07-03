@@ -291,6 +291,11 @@ export function validateBackup(raw: unknown): BackupValidationResult {
 export async function importBackup(backup: BackupFileV1): Promise<void> {
   await cancelAllScheduledNotifications();
 
+  // App lock is tied to this device's SecureStore PIN, not the backup's origin device —
+  // never let a restore silently lock (or unlock) the app based on someone else's setting.
+  const currentSettings = await db.query.appSettings.findFirst();
+  const appLockEnabled = currentSettings?.appLockEnabled ?? false;
+
   db.transaction((tx) => {
     tx.delete(reminders).run();
     tx.delete(payments).run();
@@ -380,6 +385,7 @@ export async function importBackup(backup: BackupFileV1): Promise<void> {
           defaultInterestRate: backup.data.settings.defaultInterestRate,
           remindersEnabled: backup.data.settings.remindersEnabled,
           reminderDaysBefore: backup.data.settings.reminderDaysBefore,
+          appLockEnabled,
         })
         .run();
     }
