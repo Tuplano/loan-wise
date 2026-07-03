@@ -46,13 +46,15 @@ export default function PaymentsScreen() {
   const activeLoans = loanList.filter((loan) => isOpenStatus(loan.status));
   const paidThisMonthCents = sumPaymentsInMonth(allPayments);
   const now = new Date();
-  const madeThisMonth = activeLoans.filter((loan) =>
-    loan.payments.some((payment) => payment.isPaid && payment.paidAt && isSameMonth(payment.paidAt, now))
+  const paymentsDueThisMonth = activeLoans.flatMap((loan) =>
+    loan.payments.filter((payment) => isSameMonth(payment.dueDate, now))
   );
-  const remainingCents = activeLoans
-    .filter((loan) => !madeThisMonth.includes(loan))
-    .reduce((sum, loan) => sum + loan.monthlyPaymentCents, 0);
-  const monthProgress = activeLoans.length > 0 ? madeThisMonth.length / activeLoans.length : 0;
+  const madeThisMonth = paymentsDueThisMonth.filter((payment) => payment.isPaid);
+  const remainingCents = paymentsDueThisMonth
+    .filter((payment) => !payment.isPaid)
+    .reduce((sum, payment) => sum + payment.amountCents, 0);
+  const monthProgress =
+    paymentsDueThisMonth.length > 0 ? madeThisMonth.length / paymentsDueThisMonth.length : 0;
 
   const sections = useMemo(() => {
     const entries: PaymentEntry[] = loanList.flatMap((loan) =>
@@ -114,7 +116,7 @@ export default function PaymentsScreen() {
             </View>
             <ProgressBar progress={monthProgress} />
             <ThemedText type="small" themeColor="textSecondary">
-              {madeThisMonth.length} of {activeLoans.length} payments made this month
+              {madeThisMonth.length} of {paymentsDueThisMonth.length} payments made this month
             </ThemedText>
           </View>
 

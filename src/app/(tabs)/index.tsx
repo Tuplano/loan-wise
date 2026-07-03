@@ -16,7 +16,7 @@ import { useDisplayMoney } from '@/hooks/use-display-money';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDate } from '@/lib/date';
 import { isOpenStatus } from '@/lib/loan-status';
-import { sumPaymentsInMonth } from '@/lib/stats';
+import { isSameMonth, sumPaymentsInMonth } from '@/lib/stats';
 
 function greeting() {
   const hour = new Date().getHours();
@@ -46,7 +46,11 @@ export default function DashboardScreen() {
     return sum + Math.min(principalPaid, loan.principalCents);
   }, 0);
 
-  const monthlyDueCents = activeLoans.reduce((sum, loan) => sum + loan.monthlyPaymentCents, 0);
+  const now = new Date();
+  const monthlyDueCents = activeLoans
+    .flatMap((loan) => loan.payments)
+    .filter((payment) => !payment.isPaid && isSameMonth(payment.dueDate, now))
+    .reduce((sum, payment) => sum + payment.amountCents, 0);
   const paidThisMonthCents = sumPaymentsInMonth(allPayments);
 
   const upcoming = [...activeLoans].sort(

@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { LogPaymentModal } from '@/components/log-payment-modal';
 import { PaymentNoteModal } from '@/components/payment-note-modal';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -38,6 +39,7 @@ export default function LoanDetailScreen() {
   const router = useRouter();
   const [processingId, setProcessingId] = useState<number | null>(null);
   const [notePaymentId, setNotePaymentId] = useState<number | null>(null);
+  const [pendingPaymentId, setPendingPaymentId] = useState<number | null>(null);
 
   const { data: loanResult } = useLiveQuery(
     db.query.loans.findFirst({
@@ -133,21 +135,21 @@ export default function LoanDetailScreen() {
     });
   }
 
-  async function handleToggleInstallment(payment: (typeof loan.payments)[number]) {
+  async function handleToggleInstallment(payment: (typeof loan.payments)[number], paidAt: Date | null) {
     if (processingId !== null) return;
     setProcessingId(payment.id);
 
     try {
       const now = new Date();
-      const nextIsPaid = !payment.isPaid;
+      const nextIsPaid = paidAt !== null;
 
       await db
         .update(payments)
-        .set({ isPaid: nextIsPaid, paidAt: nextIsPaid ? now : null })
+        .set({ isPaid: nextIsPaid, paidAt })
         .where(eq(payments.id, payment.id));
 
       const updatedRows = loan.payments.map((row) =>
-        row.id === payment.id ? { ...row, isPaid: nextIsPaid, paidAt: nextIsPaid ? now : null } : row
+        row.id === payment.id ? { ...row, isPaid: nextIsPaid, paidAt } : row
       );
       const nextStatus = deriveLoanStatus(updatedRows);
       const isFullyPaid = nextStatus === 'paid_off';
@@ -334,7 +336,11 @@ export default function LoanDetailScreen() {
 
               return (
                 <Pressable
-                  onPress={() => handleToggleInstallment(item.payment)}
+                  onPress={() =>
+                    item.paid
+                      ? handleToggleInstallment(item.payment, null)
+                      : setPendingPaymentId(item.payment.id)
+                  }
                   disabled={isProcessing}
                   style={({ pressed }) => pressed && styles.pressed}>
                   <View style={[styles.scheduleRow, { backgroundColor: theme.card, borderColor: theme.border }]}>
@@ -405,6 +411,17 @@ export default function LoanDetailScreen() {
           if (notePaymentId !== null) handleSaveNote(notePaymentId, note);
         }}
         onClose={() => setNotePaymentId(null)}
+      />
+      <LogPaymentModal
+        visible={pendingPaymentId !== null}
+        amountLabel={format(
+          loan.payments.find((payment) => payment.id === pendingPaymentId)?.amountCents ?? 0
+        )}
+        onConfirm={(paidAt) => {
+          const payment = loan.payments.find((row) => row.id === pendingPaymentId);
+          if (payment) handleToggleInstallment(payment, paidAt);
+        }}
+        onClose={() => setPendingPaymentId(null)}
       />
     </ThemedView>
   );
