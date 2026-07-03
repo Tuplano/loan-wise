@@ -9,19 +9,19 @@ import { Radii, Spacing } from '@/constants/theme';
 import { useDisplayMoney } from '@/hooks/use-display-money';
 
 type DashboardSummaryProps = {
-  totalPrincipalCents: number;
-  paidPrincipalCents: number;
+  totalBalanceCents: number;
+  paidBalanceCents: number;
   activeCount: number;
 };
 
 export function DashboardSummary({
-  totalPrincipalCents,
-  paidPrincipalCents,
+  totalBalanceCents,
+  paidBalanceCents,
   activeCount,
 }: DashboardSummaryProps) {
   const { format } = useDisplayMoney();
-  const outstandingCents = Math.max(totalPrincipalCents - paidPrincipalCents, 0);
-  const progress = totalPrincipalCents > 0 ? paidPrincipalCents / totalPrincipalCents : 0;
+  const outstandingCents = Math.max(totalBalanceCents - paidBalanceCents, 0);
+  const progress = totalBalanceCents > 0 ? paidBalanceCents / totalBalanceCents : 0;
 
   return (
     <Animated.View entering={FadeInDown.duration(350)}>
@@ -51,10 +51,10 @@ export function DashboardSummary({
 
         <View style={styles.footerRow}>
           <ThemedText type="smallBold" numeric style={styles.footerPaid}>
-            {format(paidPrincipalCents)} paid
+            {format(paidBalanceCents)} paid
           </ThemedText>
           <ThemedText type="smallBold" numeric style={styles.footerTotal}>
-            of {format(totalPrincipalCents)}
+            of {format(totalBalanceCents)}
           </ThemedText>
         </View>
       </LinearGradient>

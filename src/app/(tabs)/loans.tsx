@@ -150,6 +150,8 @@ export default function LoansScreen() {
             renderItem={({ item, index }) => {
               const summary = buildLoanSummary({
                 principalCents: item.principalCents,
+                monthlyPaymentCents: item.monthlyPaymentCents,
+                termMonths: item.termMonths,
                 payments: item.payments,
                 transactions: item.transactions,
               });
@@ -161,7 +163,7 @@ export default function LoansScreen() {
                   categoryName={item.category?.name}
                   categoryColor={item.category?.color}
                   principalCents={item.principalCents}
-                  totalPaidCents={summary.totalPaidCents}
+                  totalInterestCents={summary.totalInterestCents}
                   totalRemainingCents={summary.totalRemainingCents}
                   principalPaidCents={summary.principalPaidCents}
                   monthlyPaymentCents={item.monthlyPaymentCents}

@@ -14,7 +14,9 @@ import { BottomTabInset, MaxContentWidth, Radii, Spacing } from '@/constants/the
 import { db } from '@/db/client';
 import { useDisplayMoney } from '@/hooks/use-display-money';
 import { useTheme } from '@/hooks/use-theme';
+import { buildDashboardBalanceSummary } from '@/lib/dashboard-balance';
 import { formatDate } from '@/lib/date';
+import { buildLoanSummary } from '@/lib/loan-summary';
 import { isOpenStatus } from '@/lib/loan-status';
 import { remainingDueCents } from '@/lib/schedule';
 import { isSameMonth, sumTransactionsInMonth } from '@/lib/stats';
@@ -39,14 +41,16 @@ export default function DashboardScreen() {
   const overdueLoans = loans.filter((loan) => loan.status === 'overdue');
   const overdueTotalCents = overdueLoans.reduce((sum, loan) => sum + loan.monthlyPaymentCents, 0);
 
-  const totalPrincipalCents = activeLoans.reduce((sum, loan) => sum + loan.principalCents, 0);
-  const paidPrincipalCents = activeLoans.reduce((sum, loan) => {
-    const principalPaid = loan.transactions.reduce(
-      (paid, transaction) => paid + transaction.principalAppliedCents,
-      0
-    );
-    return sum + Math.min(principalPaid, loan.principalCents);
-  }, 0);
+  const activeLoanSummaries = activeLoans.map((loan) =>
+    buildLoanSummary({
+      principalCents: loan.principalCents,
+      monthlyPaymentCents: loan.monthlyPaymentCents,
+      termMonths: loan.termMonths,
+      payments: loan.payments,
+      transactions: loan.transactions,
+    })
+  );
+  const dashboardBalance = buildDashboardBalanceSummary(activeLoans);
 
   const now = new Date();
   const monthlyDueCents = activeLoans
@@ -78,8 +82,8 @@ export default function DashboardScreen() {
           </View>
 
           <DashboardSummary
-            totalPrincipalCents={totalPrincipalCents}
-            paidPrincipalCents={paidPrincipalCents}
+            totalBalanceCents={dashboardBalance.totalBalanceCents}
+            paidBalanceCents={dashboardBalance.paidBalanceCents}
             activeCount={activeLoans.length}
           />
 
@@ -193,11 +197,11 @@ export default function DashboardScreen() {
           ) : (
             <View>
               {activeLoans.map((loan, index) => {
+                const summary = activeLoanSummaries[index];
                 const principalPaid = loan.transactions.reduce(
                   (paid, transaction) => paid + transaction.principalAppliedCents,
                   0
                 );
-                const remainingCents = Math.max(loan.principalCents - principalPaid, 0);
                 const progress =
                   loan.principalCents > 0 ? Math.min(principalPaid / loan.principalCents, 1) : 0;
                 const subtitle =
@@ -208,7 +212,7 @@ export default function DashboardScreen() {
                     key={loan.id}
                     name={loan.name}
                     subtitle={subtitle}
-                    remainingCents={remainingCents}
+                    remainingCents={summary.totalRemainingCents}
                     progress={progress}
                     index={index}
                     onPress={() => router.push(`/loan/${loan.id}`)}

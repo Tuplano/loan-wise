@@ -12,11 +12,21 @@ type LoanSummaryPayment = {
 
 type LoanSummaryInput = {
   principalCents: number;
+  monthlyPaymentCents: number;
+  termMonths: number;
   payments: LoanSummaryPayment[];
   transactions: LoanSummaryTransaction[];
 };
 
-export function buildLoanSummary({ principalCents, payments, transactions }: LoanSummaryInput) {
+export function buildLoanSummary({
+  principalCents,
+  monthlyPaymentCents,
+  termMonths,
+  payments,
+  transactions,
+}: LoanSummaryInput) {
+  const totalContractCents = monthlyPaymentCents * termMonths;
+  const totalInterestCents = Math.max(totalContractCents - principalCents, 0);
   const totalPaidCents = transactions.reduce((sum, transaction) => sum + transaction.amountCents, 0);
   const principalPaidCents = transactions.reduce(
     (sum, transaction) => sum + transaction.principalAppliedCents,
@@ -40,8 +50,11 @@ export function buildLoanSummary({ principalCents, payments, transactions }: Loa
   return {
     currentInstallmentPaidCents,
     currentInstallmentRemainingCents,
+    totalContractCents,
+    totalInterestCents,
     totalPaidCents,
     totalRemainingCents,
+    totalRemainingPrincipalCents: remainingPrincipalCents,
     principalPaidCents,
     remainingPrincipalCents,
     principalProgress,

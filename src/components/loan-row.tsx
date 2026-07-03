@@ -19,7 +19,7 @@ type LoanRowProps = {
   categoryName?: string | null;
   categoryColor?: string | null;
   principalCents: number;
-  totalPaidCents: number;
+  totalInterestCents: number;
   totalRemainingCents: number;
   principalPaidCents: number;
   monthlyPaymentCents: number;
@@ -42,7 +42,7 @@ export function LoanRow({
   categoryName,
   categoryColor,
   principalCents,
-  totalPaidCents,
+  totalInterestCents,
   totalRemainingCents,
   principalPaidCents,
   monthlyPaymentCents,
@@ -91,12 +91,20 @@ export function LoanRow({
           </View>
 
           <View style={styles.amountRow}>
-            <ThemedText type="subtitle" numeric>
-              {format(totalPaidCents)}
-            </ThemedText>
-            <View style={styles.amountMeta}>
+            <View style={styles.amountBlock}>
+              <ThemedText type="subtitle" numeric>
+                {format(principalCents)}
+              </ThemedText>
               <ThemedText type="small" themeColor="textSecondary" numeric>
-                {format(totalRemainingCents)} remaining
+                + {format(totalInterestCents)} interest
+              </ThemedText>
+            </View>
+            <View style={styles.amountMeta}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Remaining
+              </ThemedText>
+              <ThemedText type="small" themeColor="textSecondary" numeric>
+                {format(totalRemainingCents)}
               </ThemedText>
             </View>
           </View>
@@ -164,8 +172,12 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
     justifyContent: 'space-between',
   },
+  amountBlock: {
+    gap: 2,
+  },
   amountMeta: {
     alignItems: 'flex-end',
+    gap: 2,
   },
   footer: {
     flexDirection: 'row',
