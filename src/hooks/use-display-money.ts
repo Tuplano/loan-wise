@@ -1,9 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 
-import { useAppSettings } from '@/hooks/use-app-settings';
-import type { CurrencyCode } from '@/lib/currency';
-import { BASE_CURRENCY, ensureRates, getCachedRate, getRatesFetchedAt } from '@/lib/exchange-rates';
-import { formatMoney } from '@/lib/format';
+import { useAppSettings } from "@/hooks/use-app-settings";
+import type { CurrencyCode } from "@/lib/currency";
+import {
+  BASE_CURRENCY,
+  ensureRates,
+  getCachedRate,
+  getRatesFetchedAt,
+} from "@/lib/exchange-rates";
+import { formatMoney } from "@/lib/format";
 
 /**
  * The app's single display currency, live-converted from the fixed storage currency (BASE_CURRENCY).
@@ -14,7 +19,9 @@ export function useDisplayMoney() {
   const currency: CurrencyCode = settings?.currency ?? BASE_CURRENCY;
 
   const [rate, setRate] = useState<number | null>(getCachedRate(currency));
-  const [fetchedAt, setFetchedAt] = useState<number | null>(getRatesFetchedAt());
+  const [fetchedAt, setFetchedAt] = useState<number | null>(
+    getRatesFetchedAt(),
+  );
   const [trackedCurrency, setTrackedCurrency] = useState(currency);
 
   // Snap to whatever's already cached the instant the display currency changes,
@@ -47,5 +54,12 @@ export function useDisplayMoney() {
     return formatMoney(convertedCents, currency);
   }
 
-  return { format, currency, isConverted, isLive, rate: effectiveRate, fetchedAt };
+  return {
+    format,
+    currency,
+    isConverted,
+    isLive,
+    rate: effectiveRate,
+    fetchedAt,
+  };
 }

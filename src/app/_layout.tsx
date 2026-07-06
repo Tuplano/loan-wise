@@ -11,6 +11,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { AppState, useColorScheme } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
 import { AppLockGate } from '@/components/app-lock-gate';
@@ -56,20 +57,22 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <AnimatedSplashOverlay />
-      {ready && (
-        <AppLockGate>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="add-loan" options={{ presentation: 'modal', title: 'Add Loan' }} />
-            <Stack.Screen name="loan/[id]/index" options={{ title: 'Loan' }} />
-            <Stack.Screen name="loan/[id]/edit" options={{ title: 'Edit Loan' }} />
-            <Stack.Screen name="categories" options={{ title: 'Categories' }} />
-            <Stack.Screen name="payoff-planner" options={{ title: 'Payoff planner' }} />
-          </Stack>
-        </AppLockGate>
-      )}
-    </ThemeProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <AnimatedSplashOverlay />
+        {ready && (
+          <AppLockGate>
+            <Stack>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="add-loan" options={{ presentation: 'modal', title: 'Add Loan' }} />
+              <Stack.Screen name="loan/[id]/index" options={{ title: 'Loan' }} />
+              <Stack.Screen name="loan/[id]/edit" options={{ title: 'Edit Loan' }} />
+              <Stack.Screen name="categories" options={{ title: 'Categories' }} />
+              <Stack.Screen name="payoff-planner" options={{ title: 'Payoff planner' }} />
+            </Stack>
+          </AppLockGate>
+        )}
+      </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
