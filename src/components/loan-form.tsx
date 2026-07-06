@@ -1,4 +1,3 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import { Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
@@ -145,28 +144,24 @@ export function LoanForm({ title, submitLabel = 'Save loan', initialValues, onSu
           style={styles.flex}
           contentContainerStyle={styles.formContent}
           keyboardShouldPersistTaps="handled">
-          <LinearGradient
-            colors={['#14855F', '#0B5D42']}
-            start={{ x: 0.15, y: 0 }}
-            end={{ x: 0.85, y: 1 }}
-            style={styles.heroCard}>
-            <ThemedText type="small" style={styles.heroLabel}>
+          <View style={[styles.heroCard, { backgroundColor: theme.primaryTint }]}>
+            <ThemedText type="small" themeColor="textSecondary">
               Computed monthly payment
             </ThemedText>
             <ThemedText type="display" numeric style={styles.heroValue}>
               {monthlyPaymentCents !== null ? formatMoney(monthlyPaymentCents, currency) : '—'}
             </ThemedText>
             <View style={styles.heroBreakdownRow}>
-              <View style={styles.heroBreakdownItem}>
-                <ThemedText type="small" style={styles.heroLabel}>
+              <View style={[styles.heroBreakdownItem, { backgroundColor: theme.card }]}>
+                <ThemedText type="small" themeColor="textSecondary">
                   Base ÷ term
                 </ThemedText>
                 <ThemedText type="smallBold" numeric style={styles.heroBreakdownValue}>
                   {basePaymentCents !== null ? formatMoney(basePaymentCents, currency) : '—'}
                 </ThemedText>
               </View>
-              <View style={styles.heroBreakdownItem}>
-                <ThemedText type="small" style={styles.heroLabel}>
+              <View style={[styles.heroBreakdownItem, { backgroundColor: theme.card }]}>
+                <ThemedText type="small" themeColor="textSecondary">
                   Interest {interestRate || 0}%
                 </ThemedText>
                 <ThemedText type="smallBold" numeric style={styles.heroBreakdownValue}>
@@ -174,7 +169,7 @@ export function LoanForm({ title, submitLabel = 'Save loan', initialValues, onSu
                 </ThemedText>
               </View>
             </View>
-          </LinearGradient>
+          </View>
 
           <ThemedText type="small" themeColor="textMuted" style={styles.baseCurrencyHint}>
             Loans are entered and stored in {BASE_CURRENCY}. Your display currency in Settings
@@ -358,20 +353,11 @@ const styles = StyleSheet.create({
     borderRadius: Radii.card,
     padding: Spacing.three + 2,
     marginBottom: Spacing.one,
-    shadowColor: '#0B5D42',
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 5,
-  },
-  heroLabel: {
-    color: 'rgba(255,255,255,0.75)',
   },
   baseCurrencyHint: {
     marginTop: -Spacing.two,
   },
   heroValue: {
-    color: '#FFFFFF',
     marginTop: 2,
     marginBottom: Spacing.two,
   },
@@ -381,12 +367,10 @@ const styles = StyleSheet.create({
   },
   heroBreakdownItem: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.14)',
     borderRadius: Radii.row - 6,
     padding: Spacing.two + 1,
   },
   heroBreakdownValue: {
-    color: '#FFFFFF',
     marginTop: 2,
   },
   field: {

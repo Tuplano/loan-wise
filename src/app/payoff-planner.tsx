@@ -1,6 +1,5 @@
 import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
 import * as Haptics from 'expo-haptics';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -100,25 +99,21 @@ export default function PayoffPlannerScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}>
-          <LinearGradient
-            colors={['#14855F', '#0B5D42']}
-            start={{ x: 0.15, y: 0 }}
-            end={{ x: 0.85, y: 1 }}
-            style={styles.heroCard}>
-            <ThemedText type="small" style={styles.heroLabel}>
+          <View style={[styles.heroCard, { backgroundColor: theme.primaryTint }]}>
+            <ThemedText type="small" themeColor="textSecondary">
               {hasExtra ? 'Projected debt-free' : 'Debt-free on the current plan'}
             </ThemedText>
-            <ThemedText type="display" style={styles.heroValue}>
+            <ThemedText type="display">
               {selected.debtFreeMonth ? monthLabel(selected.debtFreeMonth) : '—'}
             </ThemedText>
             {hasExtra && (
-              <ThemedText type="smallBold" style={styles.heroSub}>
+              <ThemedText type="smallBold" themeColor="textSecondary">
                 {selected.monthsSaved > 0
                   ? `${selected.monthsSaved} month${selected.monthsSaved === 1 ? '' : 's'} sooner · ${format(selected.interestSavedCents)} interest saved`
                   : 'Add a bit more to start cutting months off.'}
               </ThemedText>
             )}
-          </LinearGradient>
+          </View>
 
           <View style={styles.fieldBlock}>
             <ThemedText type="smallBold" themeColor="textSecondary">
@@ -316,20 +311,6 @@ const styles = StyleSheet.create({
     borderRadius: Radii.card,
     padding: Spacing.three + 2,
     gap: Spacing.one,
-    shadowColor: '#0B5D42',
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 5,
-  },
-  heroLabel: {
-    color: 'rgba(255,255,255,0.75)',
-  },
-  heroValue: {
-    color: '#FFFFFF',
-  },
-  heroSub: {
-    color: 'rgba(255,255,255,0.9)',
   },
   fieldBlock: {
     gap: Spacing.one + 1,

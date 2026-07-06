@@ -30,8 +30,6 @@ export function DashboardSummary({
         start={{ x: 0.15, y: 0 }}
         end={{ x: 0.85, y: 1 }}
         style={styles.card}>
-        <View style={styles.blob} pointerEvents="none" />
-
         <ThemedText type="small" style={styles.labelText}>
           Total outstanding balance
         </ThemedText>
@@ -67,20 +65,11 @@ const styles = StyleSheet.create({
     borderRadius: Radii.hero,
     padding: Spacing.four - 2,
     overflow: 'hidden',
-    shadowColor: '#0B5D42',
-    shadowOpacity: 0.45,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 14 },
-    elevation: 6,
-  },
-  blob: {
-    position: 'absolute',
-    top: -40,
-    right: -30,
-    width: 150,
-    height: 150,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
   labelText: {
     color: 'rgba(255,255,255,0.75)',
