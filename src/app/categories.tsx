@@ -1,35 +1,64 @@
-import { eq } from 'drizzle-orm';
-import { useLiveQuery } from 'drizzle-orm/expo-sqlite';
-import { Stack } from 'expo-router';
-import * as Haptics from 'expo-haptics';
-import { SymbolView } from 'expo-symbols';
-import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { eq } from "drizzle-orm";
+import { useLiveQuery } from "drizzle-orm/expo-sqlite";
+import * as Haptics from "expo-haptics";
+import { LinearGradient } from "expo-linear-gradient";
+import { Stack } from "expo-router";
+import { SymbolView } from "expo-symbols";
+import { useState } from "react";
+import {
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Radii, Spacing } from '@/constants/theme';
-import { db } from '@/db/client';
-import { categories } from '@/db/schema';
-import { categoryColors } from '@/db/seed';
-import { useTheme } from '@/hooks/use-theme';
+import { ColorPickerModal } from "@/components/color-picker-modal";
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+import { Radii, Spacing } from "@/constants/theme";
+import { db } from "@/db/client";
+import { categories } from "@/db/schema";
+import { categoryColors } from "@/db/seed";
+import { useTheme } from "@/hooks/use-theme";
+
+const CUSTOM_SWATCH_COLORS = [
+  "#FF0000",
+  "#FFFF00",
+  "#00FF00",
+  "#00FFFF",
+  "#0000FF",
+  "#FF00FF",
+] as const;
 
 export default function CategoriesScreen() {
   const theme = useTheme();
   const { data: categoryList } = useLiveQuery(db.query.categories.findMany());
 
-  const [newName, setNewName] = useState('');
+  const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState(categoryColors[0]);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editingName, setEditingName] = useState('');
+  const [editingName, setEditingName] = useState("");
+  const [colorPickerTarget, setColorPickerTarget] = useState<
+    "new" | number | null
+  >(null);
 
   async function handleAdd() {
     const name = newName.trim();
     if (!name) return;
-    await db.insert(categories).values({ name, color: newColor });
-    setNewName('');
-    setNewColor(categoryColors[0]);
+    try {
+      await db.insert(categories).values({ name, color: newColor });
+      setNewName("");
+      setNewColor(categoryColors[0]);
+    } catch {
+      // categories.name is unique — most likely cause of a failed insert here.
+      Alert.alert(
+        "Name already used",
+        `A category named "${name}" already exists.`,
+      );
+    }
   }
 
   function startEditing(id: number, currentName: string) {
@@ -40,34 +69,97 @@ export default function CategoriesScreen() {
   async function commitEditing() {
     const name = editingName.trim();
     if (editingId !== null && name) {
-      await db.update(categories).set({ name }).where(eq(categories.id, editingId));
+      try {
+        await db
+          .update(categories)
+          .set({ name })
+          .where(eq(categories.id, editingId));
+      } catch {
+        Alert.alert(
+          "Name already used",
+          `A category named "${name}" already exists.`,
+        );
+        return;
+      }
     }
     setEditingId(null);
   }
 
   function handleDelete(id: number, name: string) {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    Alert.alert('Delete category', `Delete "${name}"? Loans using it will become uncategorized.`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Delete',
-        style: 'destructive',
-        onPress: () => db.delete(categories).where(eq(categories.id, id)),
-      },
-    ]);
+    Alert.alert(
+      "Delete category",
+      `Delete "${name}"? Loans using it will become uncategorized.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            // db.delete(...) is a lazy "thenable" — it only actually executes once awaited/`.then()`'d,
+            // so this must be awaited rather than just returned (Alert's onPress discards the return value).
+            await db.delete(categories).where(eq(categories.id, id));
+          },
+        },
+      ],
+    );
   }
+
+  function openColorPicker(target: "new" | number) {
+    Haptics.selectionAsync();
+    setColorPickerTarget(target);
+  }
+
+  async function handleColorConfirm(hex: string) {
+    if (colorPickerTarget === "new") {
+      setNewColor(hex);
+    } else if (colorPickerTarget !== null) {
+      await db
+        .update(categories)
+        .set({ color: hex })
+        .where(eq(categories.id, colorPickerTarget));
+    }
+  }
+
+  const pickerInitialColor =
+    colorPickerTarget === "new"
+      ? newColor
+      : (categoryList.find((category) => category.id === colorPickerTarget)
+          ?.color ?? categoryColors[0]);
+  const isCustomNewColor = !categoryColors.includes(newColor);
 
   return (
     <ThemedView style={styles.container}>
-      <Stack.Screen options={{ title: 'Categories' }} />
-      <SafeAreaView style={styles.safeArea} edges={['left', 'right', 'bottom']}>
-        <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          <View style={[styles.group, { backgroundColor: theme.card, borderColor: theme.border }]}>
+      <Stack.Screen options={{ title: "Categories" }} />
+      <SafeAreaView style={styles.safeArea} edges={["left", "right", "bottom"]}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View
+            style={[
+              styles.group,
+              { backgroundColor: theme.card, borderColor: theme.border },
+            ]}
+          >
             {categoryList.map((category) => {
               const isEditing = editingId === category.id;
               return (
-                <View key={category.id} style={[styles.row, { borderBottomColor: theme.divider }]}>
-                  <View style={[styles.dot, { backgroundColor: category.color ?? undefined }]} />
+                <View
+                  key={category.id}
+                  style={[styles.row, { borderBottomColor: theme.divider }]}
+                >
+                  <Pressable
+                    hitSlop={8}
+                    onPress={() => openColorPicker(category.id)}
+                  >
+                    <View
+                      style={[
+                        styles.dot,
+                        { backgroundColor: category.color ?? undefined },
+                      ]}
+                    />
+                  </Pressable>
                   {isEditing ? (
                     <TextInput
                       value={editingName}
@@ -80,17 +172,19 @@ export default function CategoriesScreen() {
                   ) : (
                     <Pressable
                       style={styles.rowLabel}
-                      onPress={() => startEditing(category.id, category.name)}>
+                      onPress={() => startEditing(category.id, category.name)}
+                    >
                       <ThemedText>{category.name}</ThemedText>
                     </Pressable>
                   )}
                   <Pressable
                     hitSlop={8}
                     onPress={() => handleDelete(category.id, category.name)}
-                    style={({ pressed }) => pressed && styles.pressed}>
+                    style={({ pressed }) => pressed && styles.pressed}
+                  >
                     <SymbolView
                       tintColor={theme.textSecondary}
-                      name={{ ios: 'trash', android: 'delete', web: 'delete' }}
+                      name={{ ios: "trash", android: "delete", web: "delete" }}
                       size={18}
                     />
                   </Pressable>
@@ -106,11 +200,35 @@ export default function CategoriesScreen() {
                       style={[
                         styles.colorSwatch,
                         { backgroundColor: color },
-                        newColor === color && [styles.colorSwatchSelected, { borderColor: color }],
+                        newColor === color && [
+                          styles.colorSwatchSelected,
+                          { borderColor: color },
+                        ],
                       ]}
                     />
                   </Pressable>
                 ))}
+                <Pressable onPress={() => openColorPicker("new")}>
+                  <LinearGradient
+                    colors={CUSTOM_SWATCH_COLORS}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={[
+                      styles.customSwatch,
+                      isCustomNewColor && [
+                        styles.colorSwatchSelected,
+                        { borderColor: newColor },
+                      ],
+                    ]}
+                  >
+                    <ThemedText
+                      type="smallBold"
+                      style={styles.customSwatchPlus}
+                    >
+                      +
+                    </ThemedText>
+                  </LinearGradient>
+                </Pressable>
               </View>
               <View style={styles.addRow}>
                 <TextInput
@@ -124,7 +242,11 @@ export default function CategoriesScreen() {
                 <Pressable onPress={handleAdd} hitSlop={8}>
                   <SymbolView
                     tintColor={theme.primary}
-                    name={{ ios: 'plus.circle.fill', android: 'add_circle', web: 'add_circle' }}
+                    name={{
+                      ios: "plus.circle.fill",
+                      android: "add_circle",
+                      web: "add_circle",
+                    }}
                     size={26}
                   />
                 </Pressable>
@@ -133,6 +255,13 @@ export default function CategoriesScreen() {
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      <ColorPickerModal
+        visible={colorPickerTarget !== null}
+        initialColor={pickerInitialColor}
+        onConfirm={handleColorConfirm}
+        onClose={() => setColorPickerTarget(null)}
+      />
     </ThemedView>
   );
 }
@@ -150,11 +279,11 @@ const styles = StyleSheet.create({
   group: {
     borderRadius: Radii.card - 2,
     borderWidth: 1,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: Spacing.two + 2,
     paddingVertical: Spacing.three - 2,
     paddingHorizontal: Spacing.three,
@@ -182,7 +311,7 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.three,
   },
   colorRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: Spacing.two,
   },
   colorSwatch: {
@@ -193,10 +322,22 @@ const styles = StyleSheet.create({
   colorSwatchSelected: {
     borderWidth: 2,
   },
+  customSwatch: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  customSwatchPlus: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    lineHeight: 15,
+  },
   addRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: Spacing.two,
-    alignItems: 'center',
+    alignItems: "center",
   },
   input: {
     flex: 1,
