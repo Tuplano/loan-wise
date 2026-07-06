@@ -15,7 +15,7 @@ import { db } from '@/db/client';
 import { useDisplayMoney } from '@/hooks/use-display-money';
 import { useTheme } from '@/hooks/use-theme';
 import { buildDashboardBalanceSummary } from '@/lib/dashboard-balance';
-import { formatDate } from '@/lib/date';
+import { addMonths, formatDate } from '@/lib/date';
 import { buildLoanSummary } from '@/lib/loan-summary';
 import { isOpenStatus } from '@/lib/loan-status';
 import { remainingDueCents } from '@/lib/schedule';
@@ -53,9 +53,14 @@ export default function DashboardScreen() {
   const dashboardBalance = buildDashboardBalanceSummary(activeLoans);
 
   const now = new Date();
+  const nextMonth = addMonths(now, 1);
   const monthlyDueCents = activeLoans
     .flatMap((loan) => loan.payments)
     .filter((payment) => !payment.isPaid && isSameMonth(payment.dueDate, now))
+    .reduce((sum, payment) => sum + remainingDueCents(payment), 0);
+  const dueNextMonthCents = activeLoans
+    .flatMap((loan) => loan.payments)
+    .filter((payment) => !payment.isPaid && isSameMonth(payment.dueDate, nextMonth))
     .reduce((sum, payment) => sum + remainingDueCents(payment), 0);
   const paidThisMonthCents = sumTransactionsInMonth(loans.flatMap((loan) => loan.transactions));
 
@@ -75,10 +80,23 @@ export default function DashboardScreen() {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}>
           <View style={styles.header}>
-            <ThemedText type="small" themeColor="textSecondary">
-              {greeting()}
-            </ThemedText>
-            <ThemedText type="subtitle">Dashboard</ThemedText>
+            <View>
+              <ThemedText type="small" themeColor="textSecondary">
+                {greeting()}
+              </ThemedText>
+              <ThemedText type="subtitle">Dashboard</ThemedText>
+            </View>
+            <Pressable
+              onPress={() => router.push('/calendar')}
+              style={({ pressed }) => pressed && styles.pressed}>
+              <View style={[styles.iconButton, { backgroundColor: theme.card, borderColor: theme.border }]}>
+                <SymbolView
+                  tintColor={theme.textSecondary}
+                  name={{ ios: 'calendar', android: 'calendar_month', web: 'calendar_month' }}
+                  size={18}
+                />
+              </View>
+            </Pressable>
           </View>
 
           <DashboardSummary
@@ -141,6 +159,27 @@ export default function DashboardScreen() {
               label="Paid this month"
               value={format(paidThisMonthCents)}
             />
+          </View>
+
+          <View style={[styles.wideStatCard, { backgroundColor: theme.card, borderColor: theme.border }]}>
+            <View style={[styles.statIcon, { backgroundColor: theme.primaryTint, marginBottom: 0 }]}>
+              <SymbolView
+                tintColor={theme.primary}
+                name={{ ios: 'calendar', android: 'calendar_month', web: 'calendar_month' }}
+                size={15}
+              />
+            </View>
+            <View style={styles.wideStatTextGroup}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Due next month
+              </ThemedText>
+              <ThemedText
+                type="smallBold"
+                numeric
+                style={[styles.wideStatValue, { color: theme.primaryDark }]}>
+                {format(dueNextMonthCents)}
+              </ThemedText>
+            </View>
           </View>
 
           {nextDue && (
@@ -271,12 +310,22 @@ const styles = StyleSheet.create({
     gap: Spacing.three - 2,
   },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingTop: Spacing.two,
     paddingBottom: Spacing.two,
-    gap: Spacing.half,
   },
   pressed: {
     opacity: 0.75,
+  },
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: Radii.input - 1,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   overdueCard: {
     flexDirection: 'row',
@@ -318,6 +367,21 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 18,
     marginTop: 2,
+  },
+  wideStatCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.two + 2,
+    borderWidth: 1,
+    borderRadius: Radii.row + 2,
+    padding: Spacing.three - 1,
+  },
+  wideStatTextGroup: {
+    flex: 1,
+    gap: 1,
+  },
+  wideStatValue: {
+    fontSize: 18,
   },
   nextDueCard: {
     borderWidth: 1,
