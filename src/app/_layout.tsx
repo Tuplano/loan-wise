@@ -18,7 +18,7 @@ import { AppLockGate } from '@/components/app-lock-gate';
 import { db } from '@/db/client';
 import migrations from '@/db/migrations/migrations';
 import { seedAppSettings, seedDefaultCategories } from '@/db/seed';
-import { refreshAllLoanStatuses } from '@/lib/loan-status';
+import { refreshAllLoanStatuses } from '@/lib/loans/loan-status';
 
 import '@/global.css';
 

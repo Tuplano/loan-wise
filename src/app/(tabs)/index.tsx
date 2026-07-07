@@ -14,12 +14,12 @@ import { BottomTabInset, MaxContentWidth, Radii, Spacing } from '@/constants/the
 import { db } from '@/db/client';
 import { useDisplayMoney } from '@/hooks/use-display-money';
 import { useTheme } from '@/hooks/use-theme';
-import { buildDashboardBalanceSummary } from '@/lib/dashboard-balance';
+import { buildDashboardBalanceSummary } from '@/lib/loans/dashboard-balance';
 import { addMonths, formatDate } from '@/lib/date';
-import { buildLoanSummary } from '@/lib/loan-summary';
-import { isOpenStatus } from '@/lib/loan-status';
-import { remainingDueCents } from '@/lib/schedule';
-import { isSameMonth, sumTransactionsInMonth } from '@/lib/stats';
+import { buildLoanSummary } from '@/lib/loans/loan-summary';
+import { isOpenStatus } from '@/lib/loans/loan-status';
+import { remainingDueCents } from '@/lib/loans/schedule';
+import { isSameMonth, sumTransactionsInMonth } from '@/lib/loans/stats';
 
 function greeting() {
   const hour = new Date().getHours();

@@ -14,11 +14,11 @@ import {
   type LoanStatus,
   type TransactionKind,
 } from '@/db/schema';
-import type { CurrencyCode } from '@/lib/currency';
-import { convertCentsSync } from '@/lib/exchange-rates';
-import { formatMoney } from '@/lib/format';
-import { refreshAllLoanStatuses } from '@/lib/loan-status';
-import { cancelAllScheduledNotifications, scheduleLoanReminder } from '@/lib/notifications';
+import type { CurrencyCode } from '@/lib/money/currency';
+import { convertCentsSync } from '@/lib/money/exchange-rates';
+import { formatMoney } from '@/lib/money/format';
+import { refreshAllLoanStatuses } from '@/lib/loans/loan-status';
+import { cancelAllScheduledNotifications, scheduleLoanReminder } from '@/lib/device/notifications';
 
 export const BACKUP_SCHEMA_VERSION = 2;
 

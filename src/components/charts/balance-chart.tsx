@@ -9,9 +9,9 @@ import { Radii, Spacing } from '@/constants/theme';
 import { categoryColors } from '@/db/seed';
 import { useDisplayMoney } from '@/hooks/use-display-money';
 import { useTheme } from '@/hooks/use-theme';
-import { formatCompactMoney, formatMoney } from '@/lib/format';
+import { formatCompactMoney, formatMoney } from '@/lib/money/format';
 
-import type { LoanBalanceLine } from '@/lib/analytics';
+import type { LoanBalanceLine } from '@/lib/loans/analytics';
 
 const CHART_HEIGHT = 180;
 const Y_AXIS_LABEL_WIDTH = 44;

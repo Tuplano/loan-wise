@@ -14,9 +14,9 @@ import { BottomTabInset, MaxContentWidth, Radii, Spacing } from '@/constants/the
 import { db } from '@/db/client';
 import { loans } from '@/db/schema';
 import { useTheme } from '@/hooks/use-theme';
-import { buildLoanSummary } from '@/lib/loan-summary';
-import { isOpenStatus } from '@/lib/loan-status';
-import { cancelReminder } from '@/lib/notifications';
+import { buildLoanSummary } from '@/lib/loans/loan-summary';
+import { isOpenStatus } from '@/lib/loans/loan-status';
+import { cancelReminder } from '@/lib/device/notifications';
 
 type FilterKey = 'active' | 'overdue' | 'paid' | 'all';
 

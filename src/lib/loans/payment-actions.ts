@@ -2,17 +2,17 @@ import { eq, inArray } from 'drizzle-orm';
 
 import { db } from '@/db/client';
 import { loans, payments, paymentTransactions, reminders } from '@/db/schema';
-import { convertCentsSync } from '@/lib/exchange-rates';
-import { formatMoney } from '@/lib/format';
-import { deriveLoanStatus } from '@/lib/loan-status';
-import { cancelReminder, scheduleLoanReminder } from '@/lib/notifications';
+import { convertCentsSync } from '@/lib/money/exchange-rates';
+import { formatMoney } from '@/lib/money/format';
+import { deriveLoanStatus } from '@/lib/loans/loan-status';
+import { cancelReminder, scheduleLoanReminder } from '@/lib/device/notifications';
 import {
   allocatePaymentToInstallment,
   computeNextDueDate,
   extraPaymentCapacityCents,
   rebuildUnpaidInstallments,
   remainingDueCents,
-} from '@/lib/schedule';
+} from '@/lib/loans/schedule';
 
 import type { TransactionKind } from '@/db/schema';
 

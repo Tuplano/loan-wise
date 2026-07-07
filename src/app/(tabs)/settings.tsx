@@ -19,11 +19,11 @@ import { db } from '@/db/client';
 import { appSettings, type AppearanceMode } from '@/db/schema';
 import { useDisplayMoney } from '@/hooks/use-display-money';
 import { useTheme } from '@/hooks/use-theme';
-import { clearPin, setPin } from '@/lib/app-lock';
-import { exportBackup, exportPaymentsCsv, importBackup, validateBackup } from '@/lib/backup';
-import { CURRENCY_OPTIONS, type CurrencyCode } from '@/lib/currency';
-import { BASE_CURRENCY } from '@/lib/exchange-rates';
-import { ensureNotificationPermission, isNotificationsAvailable } from '@/lib/notifications';
+import { clearPin, setPin } from '@/lib/device/app-lock';
+import { exportBackup, exportPaymentsCsv, importBackup, validateBackup } from '@/lib/device/backup';
+import { CURRENCY_OPTIONS, type CurrencyCode } from '@/lib/money/currency';
+import { BASE_CURRENCY } from '@/lib/money/exchange-rates';
+import { ensureNotificationPermission, isNotificationsAvailable } from '@/lib/device/notifications';
 
 const MIN_DAYS_BEFORE = 1;
 const MAX_DAYS_BEFORE = 30;

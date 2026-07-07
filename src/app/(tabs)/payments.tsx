@@ -14,9 +14,9 @@ import { db } from '@/db/client';
 import { useDisplayMoney } from '@/hooks/use-display-money';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDate } from '@/lib/date';
-import { isOpenStatus } from '@/lib/loan-status';
-import { remainingDueCents } from '@/lib/schedule';
-import { isSameMonth, monthLabel, sumTransactionsInMonth } from '@/lib/stats';
+import { isOpenStatus } from '@/lib/loans/loan-status';
+import { remainingDueCents } from '@/lib/loans/schedule';
+import { isSameMonth, monthLabel, sumTransactionsInMonth } from '@/lib/loans/stats';
 
 type PaymentEntry = {
   key: string;

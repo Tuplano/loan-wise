@@ -11,12 +11,12 @@ import { MaxContentWidth, Radii, Spacing } from '@/constants/theme';
 import { db } from '@/db/client';
 import { useDisplayMoney } from '@/hooks/use-display-money';
 import { useTheme } from '@/hooks/use-theme';
-import { isOpenStatus } from '@/lib/loan-status';
-import { BASE_CURRENCY } from '@/lib/exchange-rates';
-import { comparePayoffStrategies, type PayoffPlan, type PayoffStrategy } from '@/lib/payoff-planner';
-import { monthLabel } from '@/lib/stats';
+import { isOpenStatus } from '@/lib/loans/loan-status';
+import { BASE_CURRENCY } from '@/lib/money/exchange-rates';
+import { comparePayoffStrategies, type PayoffPlan, type PayoffStrategy } from '@/lib/loans/payoff-planner';
+import { monthLabel } from '@/lib/loans/stats';
 
-import type { LoanBalanceLine } from '@/lib/analytics';
+import type { LoanBalanceLine } from '@/lib/loans/analytics';
 
 function toCents(value: string) {
   const amount = Number.parseFloat(value);

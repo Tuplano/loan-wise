@@ -1,6 +1,6 @@
 import { File, Paths } from 'expo-file-system';
 
-import type { CurrencyCode } from '@/lib/currency';
+import type { CurrencyCode } from '@/lib/money/currency';
 
 /** All monetary amounts are stored in this currency; every other currency is a converted display view. */
 export const BASE_CURRENCY: CurrencyCode = 'PHP';

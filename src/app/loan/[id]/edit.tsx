@@ -6,10 +6,10 @@ import { Alert } from 'react-native';
 import { LoanForm } from '@/components/loan-form';
 import { db } from '@/db/client';
 import { loans, payments } from '@/db/schema';
-import { formatMoney } from '@/lib/format';
-import { deriveLoanStatus } from '@/lib/loan-status';
-import { sumExtraPrincipal } from '@/lib/payment-actions';
-import { computeNextDueDate, rebuildUnpaidInstallments } from '@/lib/schedule';
+import { formatMoney } from '@/lib/money/format';
+import { deriveLoanStatus } from '@/lib/loans/loan-status';
+import { sumExtraPrincipal } from '@/lib/loans/payment-actions';
+import { computeNextDueDate, rebuildUnpaidInstallments } from '@/lib/loans/schedule';
 
 export default function EditLoanScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();

@@ -1,5 +1,5 @@
 import { isSameDay } from '@/lib/date';
-import { startOfMonth } from '@/lib/stats';
+import { startOfMonth } from '@/lib/loans/stats';
 
 import type { TransactionKind } from '@/db/schema';
 

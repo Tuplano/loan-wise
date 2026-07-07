@@ -1,6 +1,6 @@
 import { addMonths } from '@/lib/date';
-import { principalCoveredCents, remainingDueCents } from '@/lib/schedule';
-import { startOfMonth } from '@/lib/stats';
+import { principalCoveredCents, remainingDueCents } from '@/lib/loans/schedule';
+import { startOfMonth } from '@/lib/loans/stats';
 
 import type { LoanStatus } from '@/db/schema';
 

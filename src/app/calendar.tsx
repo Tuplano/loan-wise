@@ -13,10 +13,10 @@ import { db } from '@/db/client';
 import { useDisplayMoney } from '@/hooks/use-display-money';
 import { useEffectiveColorScheme } from '@/hooks/use-effective-color-scheme';
 import { useTheme } from '@/hooks/use-theme';
-import { buildCalendarMonth, toCalendarDateString } from '@/lib/calendar';
+import { buildCalendarMonth, toCalendarDateString } from '@/lib/loans/calendar';
 import { formatDate, isSameDay } from '@/lib/date';
-import { startOfToday } from '@/lib/loan-status';
-import { isSameMonth, startOfMonth } from '@/lib/stats';
+import { startOfToday } from '@/lib/loans/loan-status';
+import { isSameMonth, startOfMonth } from '@/lib/loans/stats';
 
 export default function CalendarScreen() {
   const theme = useTheme();

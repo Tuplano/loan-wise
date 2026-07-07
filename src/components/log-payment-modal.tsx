@@ -14,8 +14,8 @@ import { DateField } from '@/components/ui/date-field';
 import { PrimaryButton } from '@/components/ui/primary-button';
 import { Radii, Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { BASE_CURRENCY } from '@/lib/exchange-rates';
-import { formatMoney } from '@/lib/format';
+import { BASE_CURRENCY } from '@/lib/money/exchange-rates';
+import { formatMoney } from '@/lib/money/format';
 
 function toCents(value: string) {
   const amount = Number.parseFloat(value);

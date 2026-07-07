@@ -5,7 +5,7 @@ import { Radii, Spacing } from '@/constants/theme';
 import { useDisplayMoney } from '@/hooks/use-display-money';
 import { useTheme } from '@/hooks/use-theme';
 
-import type { CategorySlice } from '@/lib/analytics';
+import type { CategorySlice } from '@/lib/loans/analytics';
 
 type CategoryBarsProps = {
   slices: CategorySlice[];

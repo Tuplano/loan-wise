@@ -1,5 +1,5 @@
 import { addMonths } from '@/lib/date';
-import { startOfMonth } from '@/lib/stats';
+import { startOfMonth } from '@/lib/loans/stats';
 
 export type PayoffStrategy = 'snowball' | 'avalanche';
 

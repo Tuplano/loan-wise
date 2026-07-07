@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 
 import { useAppSettings } from "@/hooks/use-app-settings";
-import type { CurrencyCode } from "@/lib/currency";
+import type { CurrencyCode } from "@/lib/money/currency";
 import {
   BASE_CURRENCY,
   ensureRates,
   getCachedRate,
   getRatesFetchedAt,
-} from "@/lib/exchange-rates";
-import { formatMoney } from "@/lib/format";
+} from "@/lib/money/exchange-rates";
+import { formatMoney } from "@/lib/money/format";
 
 /**
  * The app's single display currency, live-converted from the fixed storage currency (BASE_CURRENCY).

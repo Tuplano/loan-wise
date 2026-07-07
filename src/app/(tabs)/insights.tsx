@@ -21,7 +21,7 @@ import {
   categoryBreakdown,
   interestSplit,
   projectedDebtFreeDate,
-} from '@/lib/analytics';
+} from '@/lib/loans/analytics';
 import { formatDate } from '@/lib/date';
 
 type FilterMode = 'category' | 'loan';

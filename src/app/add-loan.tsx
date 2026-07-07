@@ -4,11 +4,11 @@ import { useRouter } from 'expo-router';
 import { LoanForm } from '@/components/loan-form';
 import { db } from '@/db/client';
 import { loans, payments, reminders } from '@/db/schema';
-import { convertCentsSync } from '@/lib/exchange-rates';
-import { formatMoney } from '@/lib/format';
-import { deriveLoanStatus } from '@/lib/loan-status';
-import { scheduleLoanReminder } from '@/lib/notifications';
-import { buildInstallmentSchedule } from '@/lib/schedule';
+import { convertCentsSync } from '@/lib/money/exchange-rates';
+import { formatMoney } from '@/lib/money/format';
+import { deriveLoanStatus } from '@/lib/loans/loan-status';
+import { scheduleLoanReminder } from '@/lib/device/notifications';
+import { buildInstallmentSchedule } from '@/lib/loans/schedule';
 
 export default function AddLoanScreen() {
   const router = useRouter();

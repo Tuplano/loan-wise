@@ -8,7 +8,7 @@ import { ThemedText } from '@/components/themed-text';
 import { PinPad } from '@/components/ui/pin-pad';
 import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
-import { authenticateBiometric, canUseBiometrics, verifyPin } from '@/lib/app-lock';
+import { authenticateBiometric, canUseBiometrics, verifyPin } from '@/lib/device/app-lock';
 
 const PIN_LENGTH = 4;
 

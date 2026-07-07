@@ -21,16 +21,16 @@ import { loans, payments, reminders, type LoanStatus } from '@/db/schema';
 import { useDisplayMoney } from '@/hooks/use-display-money';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDate, ordinalSuffix } from '@/lib/date';
-import { convertCentsSync } from '@/lib/exchange-rates';
-import { formatMoney } from '@/lib/format';
-import { cancelReminder, scheduleLoanReminder } from '@/lib/notifications';
+import { convertCentsSync } from '@/lib/money/exchange-rates';
+import { formatMoney } from '@/lib/money/format';
+import { cancelReminder, scheduleLoanReminder } from '@/lib/device/notifications';
 import {
   applyExtraPayment,
   applyInstallmentPayment,
   sumExtraPrincipal,
   undoInstallmentPayments,
-} from '@/lib/payment-actions';
-import { extraPaymentCapacityCents, getScheduleForLoan, remainingDueCents, scheduleAnchor } from '@/lib/schedule';
+} from '@/lib/loans/payment-actions';
+import { extraPaymentCapacityCents, getScheduleForLoan, remainingDueCents, scheduleAnchor } from '@/lib/loans/schedule';
 
 const statusLabel: Record<LoanStatus, string> = {
   active: 'Active',
