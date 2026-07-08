@@ -29,7 +29,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#0B5D42",
+          "backgroundColor": "#F3F6F2",
           "image": "./assets/images/splash-wordmark.png",
           "imageWidth": 180
         }
@@ -43,6 +43,16 @@
         "expo-local-authentication",
         {
           "faceIDPermission": "Allow $(PRODUCT_NAME) to use Face ID to unlock the app"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "enableMinifyInReleaseBuilds": true,
+            "enableShrinkResourcesInReleaseBuilds": true,
+            "enableBundleCompression": true
+          }
         }
       ]
     ],
